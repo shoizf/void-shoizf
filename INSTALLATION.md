@@ -99,7 +99,7 @@ xchroot /mnt /bin/bash
 $ echo "void-hp" > /etc/hostname
 $ echo 'KEYMAP="us"' > /etc/rc.conf
 $ xbps-install -S neovim terminus-font
-$ echo 'FONT="ter-v22b"' >> /etc/rc.conf # Set the Terminus font
+$ echo 'FONT="ter-v22b"' >> /etc/rc.conf
 $ EDITOR=nvim 
 ```
 
@@ -108,7 +108,7 @@ $ EDITOR=nvim
 ##### 	3.3.2. Enable your chosen locale.
 
 ```shell
-nvi /etc/default/libc-locales
+nvim /etc/default/libc-locales
 ```
 
 ​	> Inside, un-comment the line for "en_IN UTF-8" (x for delete character & Esc, :wq for save with changes).
@@ -179,7 +179,7 @@ echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 ​	> Add the following:  
 
 ```shell
-nvi /etc/default/grub
+nvim /etc/default/grub
 "nvidia-drm.modeset=1"
 ```
 
@@ -202,7 +202,7 @@ GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4 ... nvidia-drm.modeset=1"
 ##### 	3.4.2. Install GRUB to the EFI directory
 
 ```shell
-grub-install --target=x86_64-efi --efi-directory=/bf	oot/efi --bootloader-id="Void"
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Void"
 ```
 
 ##### 	3.4.3. Generate a TEMPORARY config that will let you boot Void Linux
@@ -250,40 +250,23 @@ sudo xbps-install -Sy intel-ucode
 ```shell
 uname -r
 sudo xbps-install -S linux<version>-headers
-## example: if uname -r = 6.12.xxxx then, the above command will become: linux6.12-headers
 ```
+
+​	> example: if uname -r = 6.12.xxxx then, the above command will become: linux6.12-headers
 
 #### 		4.2. Install the NVIDIA drivers and related packages.
 
 ```shell
-sudo xbps-install -Sy nvidia nvidia-libs nvidia-libs-32bit nvidia-vaapi-driver mesa-dri mesa-dri-32bit mesa-demos noto-fonts-ttf-variable noto-fonts-emoji niri xdg-desktop-portal-wlr wayland xwayland-satellite seatd polkit-kde-agent swaybg swayidle alacritty walker Waybar firefox sddm tmux font-firacode ripgrep fd tree -f
+sudo xbps-install -Sy nvidia nvidia-libs nvidia-libs-32bit\
+nvidia-vaapi-driver mesa-dri mesa-dri-32bit mesa-demos\
+noto-fonts-ttf-variable noto-fonts-emoji niri\
+xdg-desktop-portal-wlr wayland xwayland-satellite\ 
+polkit-kde-agent swaybg swayidle alacritty walker Waybar\
+firefox sddm tmux font-firacode ripgrep fd tree xorg-server\
+xf86-input-libinput xf86-video-intel dbus-libs dbus-x11
 ```
 
-#### 	4.3. Enable Kernel Modesettig via GRUB
-
-```shell
-sed -i 's/GRUB_CMDLINE_LINUX_D0EFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 nvidia-drm.modeset=1"/' /etc/default/grub 
-```
-
-​	> Or you could manually open it with $EDITOR and add the lines manually.
-
-```shell
-$EDITOR /etc/default/grub 
-```
-
-​	> Type in:
-
-```shell
-"nvidia-drm.modeset-1"
-```
-
-​	> to the end of the line: 
-
-```shell
-"GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"  
-```
-
-#### 	4.4. Blacklist the default Nouveau driver to prevent conflicts
+#### 	4.3. Blacklist the default Nouveau driver to prevent conflicts
 
 ```shell
 echo -e "blacklist nouveau\noptions nouveau modeset=0" | sudo tee /etc/modprobe.d/blacklist-nouveau.conf
@@ -366,41 +349,15 @@ rm -rf ~/.config/nvim/.git
 curl -fsSL "https://github.com/gpakosz/.tmux/raw/refs/heads/master/install.sh#$(date +%s)" | bash
 ```
 
-### 	3. Add user to _seatd group for device access
-
-#### 	3.1. seatd configuration
-
-##### 	3.1.1. Adding user to the group.
+### 	3. Enable necessary services
 
 ```shell
-sudo usermod -aG _seatd <uname>
+sudo ln -s /etc/sv/dbus /var/service/
+sudo ln -s /etc/sv/sddm /var/service/
 ```
 
-##### 	3.1.2. Enable seatd service
+### 	4. Launch Niri under dbus
 
 ```shell
-sudo ln -s /etc/sv/seatd /var/service/
-sudo ln -s /etc/sv/dbus   /var/service/
-```
-
-#### 	3.2. Core runtime setup for Niri + seatd + dbus
-
-##### 	3.2.1. Ensure runtime directory exists and is owned by your user
-
-```shell
-sudo mkdir -p /run/user/$(id -u)
-sudo chown <uname>:<uname> /run/user/$(id -u)
-sudo chmod 700 /run/user/$(id -u)
-```
-
-##### 	3.2.2. Export runtime dir for this session
-
-```shell
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
-```
-
-##### 	3.2.3. Launch Niri under dbus
-
-```shell
-dbus-run-session -- env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" niri
+dbus-run-session -- /usr/bin/niri
 ```
