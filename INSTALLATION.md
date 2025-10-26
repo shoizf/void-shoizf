@@ -257,13 +257,8 @@ sudo xbps-install -S linux<version>-headers
 #### 		4.2. Install the NVIDIA drivers and related packages.
 
 ```shell
-sudo xbps-install -Sy nvidia nvidia-libs nvidia-libs-32bit\
-nvidia-vaapi-driver mesa-dri mesa-dri-32bit mesa-demos\
-noto-fonts-ttf-variable noto-fonts-emoji niri\
-xdg-desktop-portal-wlr wayland xwayland-satellite\ 
-polkit-kde-agent swaybg swayidle alacritty walker Waybar\
-firefox sddm tmux font-firacode ripgrep fd tree xorg-server\
-xf86-input-libinput xf86-video-intel dbus-libs dbus-x11
+chmod +x installation.sh
+sudo ./installation.sh
 ```
 
 #### 	4.3. Blacklist the default Nouveau driver to prevent conflicts
