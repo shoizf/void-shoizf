@@ -26,5 +26,14 @@ InputMethod=qtvirtualkeyboard" | sudo tee /etc/sddm.conf.d/virtualkbd.conf
 echo "Setting up 'jake_the_dog' variant in metadata.desktop ..."
 sudo sed -i 's|^ConfigFile=.*|ConfigFile=Themes/jake_the_dog.conf|' /usr/share/sddm/themes/sddm-astronaut-theme/metadata.desktop
 
+# Add the SDDM service symlink to /var/service/ (void linux runit)
+if [ ! -L /var/service/sddm ]; then
+    echo "Adding symlink for sddm service to /var/service/sddm"
+    sudo ln -s /etc/sv/sddm /var/service/sddm
+else
+    echo "Symlink for sddm service already exists"
+fi
+
 echo "SDDM Astronaut theme successfully installed with Jake the Dog config!"
+echo "Note: The SDDM service is linked but NOT enabled or started automatically."
 
