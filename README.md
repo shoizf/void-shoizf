@@ -76,4 +76,4 @@ Everything you need beyond the minimal OS install and partition setup is automat
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/shoizf/void-shoizf/blob/main/LICENSE) file for details.
