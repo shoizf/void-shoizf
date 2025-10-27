@@ -12,7 +12,7 @@ This repo is the toolkit and documentation I use to standardize and  streamline 
 - **Compositor:** [Niri](https://github.com/YaLTeR/niri) Wayland compositor
 - **Status Bar:** [Waybar](https://github.com/Alexays/Waybar)
 - **Application Launcher / Picker:** [Walker](https://github.com/abenz1267/walker)
-  - **Terminal Emulator:** [Alacritty](https://github.com/alacritty/alacritty)
+- **Terminal Emulator:** [Alacritty](https://github.com/alacritty/alacritty)
 - **Editor:** [Neovim](https://github.com/neovim) (nvim)
 - **Browser:** [Ungoogled Chromium](https://github.com/ungoogled-software/ungoogled-chromium)
 - **Terminal Multiplexer:** [tmux](https://github.com/tmux/tmux/wiki)
