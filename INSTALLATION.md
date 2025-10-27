@@ -254,11 +254,11 @@ sudo xbps-install -S linux<version>-headers
 
 ​	> example: if uname -r = 6.12.xxxx then, the above command will become: linux6.12-headers
 
-#### 		4.2. Install the NVIDIA drivers and related packages.
+#### 		4.2. Install the NVIDIA drivers and shoizf setup.
 
 ```shell
 chmod +x installation.sh
-sudo ./installation.sh
+./installation.sh
 ```
 
 #### 	4.3. Blacklist the default Nouveau driver to prevent conflicts
