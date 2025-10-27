@@ -62,15 +62,26 @@ for group in $GROUPS_TO_ADD; do
         usermod -a -G $group "$SUDO_USER"
         echo "User $SUDO_USER added to $group group. You may need to log out and log back in for this to take effect."
     fi
-done
+done 
 
-# Append: Download, chmod +x and execute sddm_astronaut.sh installer script
+# Download, chmod +x and execute niri.sh installer script
+echo "Configuring niri"
+
+chmod +x ./installers/niri.sh
+
+if ./installers/niri.sh; then
+	echo "✅ niri configuration finished succesfully!"
+else
+	echo "❌ niri configuration failed."
+fi
+
+# Download, chmod +x and execute sddm_astronaut.sh installer script
 echo "Downloading and executing SDDM Astronaut theme installer script..."
 
 chmod +x ./installers/sddm_astronaut.sh
 
 if ./installers/sddm_astronaut.sh; then
-    echo "✅ SDDM Astronaut theme installation finished successfully."
+    echo "✅ SDDM Astronaut theme installation finished successfully!"
 else
     echo "❌ SDDM Astronaut theme installation failed."
 fi
