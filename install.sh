@@ -86,3 +86,21 @@ else
     echo "❌ SDDM Astronaut theme installation failed."
 fi
 
+echo "Starting GRUB theme installation..."
+chmod +x ./installers/grub.sh
+if sudo ./installers/grub.sh; then
+    echo "✅ GRUB theme setup completed successfully."
+else
+    echo "❌ GRUB theme setup failed!"
+fi
+
+echo "Applying shoizf configuration..."
+
+if [ $? -eq 0 ]; then
+    echo "🎈 Shoizf config applied successfully!"
+    echo "🚀 Your system is now configured and ready."
+else
+    echo "❌ Shoizf config failed to apply. Check for errors above!"
+    echo "⚠️ Please review the logs and try again."
+fi
+
