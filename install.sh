@@ -64,3 +64,14 @@ for group in $GROUPS_TO_ADD; do
     fi
 done
 
+# Append: Download, chmod +x and execute sddm_astronaut.sh installer script
+echo "Downloading and executing SDDM Astronaut theme installer script..."
+
+chmod +x ./installers/sddm_astronaut.sh
+
+if ./installers/sddm_astronaut.sh; then
+    echo "✅ SDDM Astronaut theme installation finished successfully."
+else
+    echo "❌ SDDM Astronaut theme installation failed."
+fi
+
