@@ -5,18 +5,45 @@ PKG_CMD="sudo xbps-install -Sy"
 
 # List of all packages to install, separated by spaces and wrapped for clarity
 PACKAGES="\
-nvidia nvidia-libs nvidia-libs-32bit \
-nvidia-vaapi-driver mesa-dri mesa-dri-32bit mesa-demos \
-noto-fonts-ttf-variable noto-fonts-emoji niri \
-xdg-desktop-portal-wlr wayland xwayland-satellite \
-polkit-kde-agent swaybg swayidle alacritty walker Waybar \
-firefox sddm tmux font-firacode ripgrep fd tree xorg-server \
-xf86-input-libinput xf86-video-intel dbus-libs dbus-x11 \
-brightnessctl cups cups-filters pulseaudio pamixer acpi \
-jq font-awesome dateutils wlr-randr \
-xdg-desktop-portal power-profiles-daemon \
-pamixer procps-ng NetworkManager networkmanager-dmenu \
-nm-tray acpi playerctl"
+	noto-fonts-ttf-variable \
+	noto-fonts-emoji \
+	niri \
+xdg-desktop-portal-wlr \
+wayland \
+xwayland-satellite \
+polkit-kde-agent \
+swaybg \
+swayidle \
+alacritty \
+walker \
+Waybar \
+firefox \
+sddm \
+tmux \
+font-firacode \
+ripgrep \
+fd \
+tree \
+xorg-server \
+xf86-input-libinput \
+dbus-libs \
+dbus-x11 \
+brightnessctl \
+cups \
+cups-filters \
+acpi \
+jq \
+font-awesome \
+dateutils \
+wlr-randr \
+xdg-desktop-portal \
+power-profiles-daemon \
+procps-ng \
+NetworkManager \
+networkmanager-dmenu \
+nm-tray \
+acpi \
+playerctl"
 
 echo "Starting package installation..."
 
@@ -94,13 +121,33 @@ else
     echo "❌ GRUB theme setup failed!"
 fi
 
+# Execute NVIDIA installer script
+echo "Executing NVIDIA installer script..."
+chmod +x ./installers/nvidia.sh
+if ./installers/nvidia.sh; then
+    echo "✅ NVIDIA installer finished successfully!"
+else
+    echo "❌ NVIDIA installer failed!"
+fi
+
+# Execute Vulkan Intel installer script
+echo "Executing Vulkan Intel installer script..."
+chmod +x ./installers/vulkan-intel.sh
+if ./installers/vulkan-intel.sh; then
+    echo "✅ Vulkan Intel installer finished successfully!"
+else
+    echo "❌ Vulkan Intel installer failed!"
+fi
+
+# Execute Intel GPU installer script
+echo "Executing Intel GPU installer script..."
+chmod +x ./installers/intel.sh
+if ./installers/intel.sh; then
+    echo "✅ Intel GPU installer finished successfully!"
+else
+    echo "❌ Intel GPU installer failed!"
+fi
+
 echo "Applying shoizf configuration..."
 
-if [ $? -eq 0 ]; then
-    echo "🎈 Shoizf config applied successfully!"
-    echo "🚀 Your system is now configured and ready."
-else
-    echo "❌ Shoizf config failed to apply. Check for errors above!"
-    echo "⚠️ Please review the logs and try again."
-fi
 
