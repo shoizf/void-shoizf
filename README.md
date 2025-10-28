@@ -6,6 +6,19 @@ This repo is the toolkit and documentation I use to standardize and  streamline 
 
 ------
 
+## ⚠️ Warning: NVIDIA + Intel Hybrid GPU System Only
+
+**Important:** This repository and its scripts have been developed, tested, and tailored exclusively for systems with a dual-GPU configuration featuring an NVIDIA discrete GPU (dGPU) and an Intel integrated GPU (iGPU).  
+Other hardware or single GPU configurations are currently **not supported** and may not work correctly with this setup.
+
+If you have a different GPU setup or find issues, this repo might not meet your needs yet.
+
+Contributions and collaboration are warmly welcomed to help extend support for other configurations and improve overall compatibility.
+
+Please open an issue or pull request if interested!
+
+------
+
 ## Main Components of this Setup
 
 - **Display Manager:** [SDDM](https://github.com/sddm/sddm) (with Astronaut theme)
