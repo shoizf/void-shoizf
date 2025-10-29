@@ -348,7 +348,7 @@ curl -fsSL "https://github.com/gpakosz/.tmux/raw/refs/heads/master/install.sh#$(
 
 ### 	3. Reboot:
 
-sudo shutdown -r now
 ```shell
-
+sudo shutdown -r now
 ```
+
