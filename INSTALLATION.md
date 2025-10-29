@@ -257,8 +257,10 @@ sudo xbps-install -S linux<version>-headers
 #### 		4.2. Install the NVIDIA drivers and shoizf setup.
 
 ```shell
-chmod +x installation.sh
-./installation.sh
+git clone https://github.com/shoizf/void-shoizf.git
+cd void-shoizf
+chmod +x install.sh
+./install.sh
 ```
 
 #### 	4.3. Blacklist the default Nouveau driver to prevent conflicts
