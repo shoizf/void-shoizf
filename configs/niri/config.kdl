@@ -35,7 +35,7 @@ input {
         // dwtp
         // drag false
         // drag-lock
-        // natural-scroll
+        natural-scroll
         accel-speed 0.2
         // accel-profile "flat"
         scroll-method "two-finger"
@@ -44,7 +44,7 @@ input {
 
     mouse {
         // off
-        // natural-scroll
+        natural-scroll
         accel-speed 0.2
         // accel-profile "flat"
         // scroll-method "no-scroll"
@@ -268,8 +268,29 @@ layout {
 // which may be more convenient to use.
 // See the binds section below for more spawn examples.
 
+// Set theme preference via Settings
+spawn-sh-at-startup "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
+
+// --- Start XDG Desktop Portal Services ---
+// Launch the main portal daemon (you already have this package)
+spawn-at-startup "/usr/libexec/xdg-desktop-portal"
+
+// Launch the GTK backend (the package we just installed)
+spawn-at-startup "/usr/libexec/xdg-desktop-portal-gtk"
+
 // This line starts waybar, a commonly used bar for Wayland compositors.
 spawn-at-startup "waybar"
+
+// This line will start the Elephant service on startup.
+spawn-at-startup "/home/shoi/go/bin/elephant"
+
+// This line will start 'wob' OSD and create its socket.
+spawn-sh-at-startup "mkfifo /home/shoi/.wob.sock || true; exec wob -i /home/shoi/.wob.sock"
+
+// Launch PipeWire service
+spawn-at-startup "/usr/bin/pipewire"
+spawn-at-startup "/usr/bin/pipewire-pulse"
+spawn-at-startup "/usr/bin/wireplumber"
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
 // spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"
@@ -366,7 +387,8 @@ binds {
     Mod+T hotkey-overlay-title="Open a Terminal: alacritty" { spawn "alacritty"; }
     Mod+D hotkey-overlay-title="Run an Application: walker" { spawn "walker"; }
     Mod+B hotkey-overlay-title="Open a Browser: firefox" { spawn "firefox"; }
-    Super+Alt+L hotkey-overlay-title="Lock the Screen: swaylock" { spawn "swaylock"; }
+    Super+Alt+L hotkey-overlay-title="Lock the Screen: swaylock" { spawn "swaylock";
+}
 
     // Use spawn-sh to run a shell command. Do this if you need pipes, multiple commands, etc.
     // Note: the entire command goes as a single argument. It's passed verbatim to `sh -c`.
@@ -376,16 +398,30 @@ binds {
     // Example volume keys mappings for PipeWire & WirePlumber.
     // The allow-when-locked=true property makes them work even when the session is locked.
     // Using spawn-sh allows to pass multiple arguments together with the command.
-    XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.1+"; }
-    XF86AudioLowerVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.1-"; }
-    XF86AudioMute        allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"; }
-    XF86AudioMicMute     allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
+    XF86AudioRaiseVolume allow-when-locked=true { 
+	        spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+ && wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{ print $2 * 100 }' > /home/shoi/.wob.sock"
+    }
+    XF86AudioLowerVolume allow-when-locked=true {
+        spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%- && wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{ print $2 * 100 }' > /home/shoi/.wob.sock"
+    }
+    XF86AudioMute allow-when-locked=true {
+        spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle && wpctl get-mute @DEFAULT_AUDIO_SINK@ | awk '{ if ($2 == \"yes\") print 0; else wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk \"{ print $2 * 100 }\" }' > /home/shoi/.wob.sock"
+    }
+    XF86AudioMicMute allow-when-locked=true {
+        spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"
+    }
 
     // Example brightness key mappings for brightnessctl.
     // You can use regular spawn with multiple arguments too (to avoid going through "sh"),
     // but you need to manually put each argument in separate "" quotes.
-    XF86MonBrightnessUp allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "+10%"; }
-    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "10%-"; }
+    XF86MonBrightnessUp allow-when-locked=true {
+        spawn-sh "brightnessctl --class=backlight set +5% && brightnessctl --class=backlight g | awk '{ print ($1 / 960 * 100) }' > /home/shoi/.wob.sock"
+    }
+    XF86MonBrightnessDown allow-when-locked=true {
+        spawn-sh "brightnessctl --class=backlight set 5%- && brightnessctl --class=backlight g | awk '{ print ($1 / 960 * 100) }' > /home/shoi/.wob.sock"
+    }
+
+
 
     // Open/close the Overview: a zoomed-out view of workspaces and windows.
     // You can also move the mouse into the top-left hot corner,

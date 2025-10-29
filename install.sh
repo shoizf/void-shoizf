@@ -1,153 +1,184 @@
 #!/bin/sh
 
-# Set the package manager command and system flags
-PKG_CMD="sudo xbps-install -Sy"
+# Main installation script for void-shoizf setup
+# Should be run as the target user (e.g., 'shoi') from within the cloned repository directory.
+# Commands requiring root privileges will use 'sudo' internally.
 
-# List of all packages to install, separated by spaces and wrapped for clarity
-PACKAGES="\
-	noto-fonts-ttf-variable \
-	noto-fonts-emoji \
-	niri \
-xdg-desktop-portal-wlr \
-wayland \
-xwayland-satellite \
-polkit-kde-agent \
-swaybg \
-swayidle \
-alacritty \
-walker \
-Waybar \
-firefox \
-sddm \
-tmux \
-font-firacode \
-ripgrep \
-fd \
-tree \
-xorg-server \
-xf86-input-libinput \
-dbus-libs \
-dbus-x11 \
-brightnessctl \
-cups \
-cups-filters \
-acpi \
-jq \
-font-awesome \
-dateutils \
-wlr-randr \
-xdg-desktop-portal \
-power-profiles-daemon \
-procps-ng \
-NetworkManager \
-networkmanager-dmenu \
-nm-tray \
-acpi \
-playerctl"
+# --- Check if running as root ---
+if [ "$(id -u)" -eq 0 ]; then
+  echo "❌ Don't run as sudo, exiting!" >&2 # Print error to stderr
+  exit 1
+fi
 
-echo "Starting package installation..."
+# --- Determine Target User and Home Directory (Running as non-root) ---
+TARGET_USER=$(logname || whoami) # Get the user running the script
+TARGET_USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
 
-# Execute the installation command
-$PKG_CMD $PACKAGES
+if [ -z "$TARGET_USER" ] || [ -z "$TARGET_USER_HOME" ]; then
+  echo "❌ Could not determine target user or home directory. Please run this script as the intended user."
+  exit 1
+fi
+echo "Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
+
+# --- Package Installation ---
+PKG_CMD="xbps-install -Sy"
+# List CORE packages (fonts and audio handled by sub-scripts)
+PACKAGES="
+    # Base Desktop & Niri
+    niri xdg-desktop-portal-wlr wayland xwayland-satellite polkit-kde-agent
+    swaybg swayidle swaylock alacritty walker
+    # Waybar & Base Dependencies (Config handled later)
+    Waybar wob mpc yazi pcmanfm pavucontrol swayimg gammastep brightnessctl
+    xdg-desktop-portal xdg-desktop-portal-gtk power-profiles-daemon
+    firefox sddm tmux ripgrep fd tree xorg-server xf86-input-libinput
+    dbus-libs dbus-x11 cups cups-filters acpi jq dateutils wlr-randr procps-ng
+    NetworkManager networkmanager-dmenu nm-tray playerctl unzip
+    terminus-font
+"
+
+echo "Starting core package installation (will require sudo password)..."
+sudo $PKG_CMD $PACKAGES
 
 if [ $? -eq 0 ]; then
-    echo "🎉 All packages installed successfully!"
-    echo "Remember to enable and start services like sddm and dbus after a reboot or manual command."
+  echo "✅ Core packages installed successfully!"
 else
-    echo "❌ Package installation failed! Check the output for errors."
+  echo "❌ Core package installation failed! Check the output for errors."
+  exit 1
 fi
 
-# Ensure the directory for udev rules exists
+# --- Udev Rules for Backlight ---
 UDEV_RULES_DIR="/etc/udev/rules.d"
-if [ ! -d "$UDEV_RULES_DIR" ]; then
-    echo "Creating directory $UDEV_RULES_DIR..."
-    mkdir -p "$UDEV_RULES_DIR"
-fi
+echo "Checking/Creating directory $UDEV_RULES_DIR (will require sudo password)..."
+sudo mkdir -p "$UDEV_RULES_DIR"
 
-# Create udev rules file for backlight brightness permissions
 UDEV_RULES_FILE="$UDEV_RULES_DIR/90-backlight.rules"
-
-echo "Creating udev rules for backlight permissions at $UDEV_RULES_FILE..."
-
-cat <<EOF > $UDEV_RULES_FILE
+echo "Creating udev rules for backlight permissions at $UDEV_RULES_FILE (will require sudo password)..."
+cat <<EOF | sudo tee $UDEV_RULES_FILE >/dev/null
 ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness"
 ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
 EOF
 
-echo "Reloading udev rules..."
-udevadm control --reload
-udevadm trigger
+echo "Reloading udev rules (will require sudo password)..."
+sudo udevadm control --reload
+sudo udevadm trigger
 
-# Add current user to necessary groups (excluding virtualization groups)
-GROUPS_TO_ADD="video lp"
-
+# --- Add User to Groups ---
+GROUPS_TO_ADD="video lp input"
+echo "Checking and adding user $TARGET_USER to necessary groups (will require sudo password)..."
 for group in $GROUPS_TO_ADD; do
-    if id -nG "$SUDO_USER" | grep -qw $group; then
-        echo "User $SUDO_USER is already in the $group group."
-    else
-        echo "Adding user $SUDO_USER to $group group..."
-        usermod -a -G $group "$SUDO_USER"
-        echo "User $SUDO_USER added to $group group. You may need to log out and log back in for this to take effect."
-    fi
-done 
+  if id -nG "$TARGET_USER" | grep -qw $group; then
+    echo "User $TARGET_USER is already in the $group group."
+  else
+    echo "Adding user $TARGET_USER to $group group..."
+    sudo usermod -a -G $group "$TARGET_USER"
+    echo "User $TARGET_USER added to $group group. Log out/in required for changes to take full effect."
+  fi
+done
 
-# Download, chmod +x and execute niri.sh installer script
-echo "Configuring niri"
+# --- Execute Modular Installers from Local Repo ---
 
+echo "Running Font installation script..."
+chmod +x ./installers/add-font.sh
+if ./installers/add-font.sh; then
+  echo "✅ Font installation finished successfully!"
+else
+  echo "❌ Font installation script failed during execution!"
+fi
+
+echo "Running Audio integration script..."
+chmod +x ./installers/audio-integration.sh
+if ./installers/audio-integration.sh; then
+  echo "✅ Audio integration finished successfully!"
+else
+  echo "❌ Audio integration script failed during execution!"
+  exit 1 # Audio is critical
+fi
+
+echo "Configuring Niri..."
 chmod +x ./installers/niri.sh
-
-if ./installers/niri.sh; then
-	echo "✅ niri configuration finished succesfully!"
+# Pass user and home dir to the script if it needs them
+if ./installers/niri.sh "$TARGET_USER" "$TARGET_USER_HOME"; then
+  echo "✅ Niri configuration finished successfully!"
 else
-	echo "❌ niri configuration failed."
+  echo "❌ Niri configuration script failed."
 fi
 
-# Download, chmod +x and execute sddm_astronaut.sh installer script
-echo "Downloading and executing SDDM Astronaut theme installer script..."
+# --- Waybar Configuration Section REMOVED ---
+# Waybar config files (config.jsonc, style.css) will be handled separately later.
 
+echo "Installing SDDM Astronaut theme..."
 chmod +x ./installers/sddm_astronaut.sh
-
 if ./installers/sddm_astronaut.sh; then
-    echo "✅ SDDM Astronaut theme installation finished successfully!"
+  echo "✅ SDDM Astronaut theme installation finished successfully!"
 else
-    echo "❌ SDDM Astronaut theme installation failed."
+  echo "❌ SDDM Astronaut theme installation script failed."
 fi
 
-echo "Starting GRUB theme installation..."
+echo "Setting up GRUB theme (will require sudo password)..."
 chmod +x ./installers/grub.sh
 if sudo ./installers/grub.sh; then
-    echo "✅ GRUB theme setup completed successfully."
+  echo "✅ GRUB theme setup completed successfully."
 else
-    echo "❌ GRUB theme setup failed!"
+  echo "❌ GRUB theme setup script failed!"
 fi
 
-# Execute NVIDIA installer script
+# --- GPU Installers ---
 echo "Executing NVIDIA installer script..."
 chmod +x ./installers/nvidia.sh
 if ./installers/nvidia.sh; then
-    echo "✅ NVIDIA installer finished successfully!"
+  echo "✅ NVIDIA installer finished successfully!"
 else
-    echo "❌ NVIDIA installer failed!"
+  echo "❌ NVIDIA installer failed!"
 fi
 
-# Execute Vulkan Intel installer script
 echo "Executing Vulkan Intel installer script..."
 chmod +x ./installers/vulkan-intel.sh
 if ./installers/vulkan-intel.sh; then
-    echo "✅ Vulkan Intel installer finished successfully!"
+  echo "✅ Vulkan Intel installer finished successfully!"
 else
-    echo "❌ Vulkan Intel installer failed!"
+  echo "❌ Vulkan Intel installer failed!"
 fi
 
-# Execute Intel GPU installer script
 echo "Executing Intel GPU installer script..."
 chmod +x ./installers/intel.sh
 if ./installers/intel.sh; then
-    echo "✅ Intel GPU installer finished successfully!"
+  echo "✅ Intel GPU installer finished successfully!"
 else
-    echo "❌ Intel GPU installer failed!"
+  echo "❌ Intel GPU installer failed!"
 fi
 
-echo "Applying shoizf configuration..."
+# --- Enable System Services (runit) ---
+echo "Enabling system services (runit - requires sudo password)..."
+SERVICE_DIR="/var/service"
 
+enable_service() {
+  local service_name="$1"
+  local service_path="/etc/sv/$service_name"
+  local target_link="$SERVICE_DIR/$service_name"
 
+  if [ ! -d "$service_path" ] && [ ! -L "$service_path" ]; then
+    echo "❓ Service definition not found for $service_name at $service_path. Skipping enable."
+    return 1
+  fi
+
+  if [ ! -L "$target_link" ]; then
+    echo "Enabling $service_name service..."
+    sudo ln -sf "$service_path" "$target_link"
+  else
+    echo "$service_name service already enabled."
+  fi
+}
+
+# Enable services needed by this desktop config
+enable_service power-profiles-daemon
+enable_service NetworkManager
+# SDDM and DBUS system services should already be enabled per INSTALLATION.md Stage 3
+
+echo "✅ System services checked/enabled."
+
+# --- Cleanup Removed ---
+
+echo "🎉 Main installation script finished!"
+echo "Please address any manual steps noted (e.g., rmpc setup)."
+echo "Waybar configuration needs to be applied separately."
+echo "A final reboot is recommended before using the full desktop environment."
