@@ -346,15 +346,9 @@ rm -rf ~/.config/nvim/.git
 curl -fsSL "https://github.com/gpakosz/.tmux/raw/refs/heads/master/install.sh#$(date +%s)" | bash
 ```
 
-### 	3. Enable necessary services
+### 	3. Reboot:
 
+sudo shutdown -r now
 ```shell
-sudo ln -s /etc/sv/dbus /var/service/
-sudo ln -s /etc/sv/sddm /var/service/
-```
 
-### 	4. Launch Niri under dbus
-
-```shell
-dbus-run-session -- /usr/bin/niri
 ```
