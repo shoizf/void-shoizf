@@ -27,6 +27,7 @@ FONT_PACKAGES="
     nerd-fonts-symbols-ttf
     terminus-font
     dejau-fonts-ttf
+    liberation-fonts-ttf
 "
 sudo xbps-install -Sy $FONT_PACKAGES
 if [ $? -ne 0 ]; then
