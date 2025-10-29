@@ -24,16 +24,15 @@ echo "Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
 PKG_CMD="xbps-install -Sy"
 # List CORE packages (fonts and audio handled by sub-scripts)
 PACKAGES="
-    # Base Desktop & Niri
-    niri xdg-desktop-portal-wlr wayland xwayland-satellite polkit-kde-agent
-    swaybg swayidle swaylock alacritty walker
-    # Waybar & Base Dependencies (Config handled later)
-    Waybar wob mpc yazi pcmanfm pavucontrol swayimg gammastep brightnessctl
-    xdg-desktop-portal xdg-desktop-portal-gtk power-profiles-daemon
-    firefox sddm tmux ripgrep fd tree xorg-server xf86-input-libinput
-    dbus-libs dbus-x11 cups cups-filters acpi jq dateutils wlr-randr procps-ng
-    NetworkManager networkmanager-dmenu nm-tray playerctl unzip
-    terminus-font
+    niri xdg-desktop-portal-wlr wayland xwayland-satellite 
+    polkit-kde-agent swaybg swayidle swaylock alacritty 
+    walker Waybar wob mpc yazi pcmanfm pavucontrol swayimg 
+    gammastep brightnessctl xdg-desktop-portal 
+    xdg-desktop-portal-gtk power-profiles-daemon firefox 
+    sddm tmux ripgrep fd tree xorg-server xf86-input-libinput
+    dbus-libs dbus-x11 cups cups-filters acpi jq dateutils 
+    wlr-randr procps-ng NetworkManager networkmanager-dmenu 
+    nm-tray playerctl unzip flatpak elogind
 "
 
 echo "Starting core package installation (will require sudo password)..."
@@ -147,6 +146,25 @@ else
   echo "❌ Intel GPU installer failed!"
 fi
 
+# Enable dbus service first (if not already enabled)
+echo "Ensuring dbus service is enabled and running..."
+if [ ! -L /var/service/dbus ]; then
+  echo "Creating symlink for dbus service..."
+  sudo ln -s /etc/sv/dbus /var/service/
+fi
+
+echo "Starting dbus service..."
+sudo sv up dbus
+
+# Run NetworkManager installer script from installers directory
+echo "Executing NetworkManager installer script..."
+chmod +x ./installers/networkmanager.sh
+if ./installers/networkmanager.sh; then
+  echo "✅ NetworkManager installer finished successfully!"
+else
+  echo "❌ NetworkManager installer failed!"
+fi
+
 # --- Enable System Services (runit) ---
 echo "Enabling system services (runit - requires sudo password)..."
 SERVICE_DIR="/var/service"
@@ -172,6 +190,8 @@ enable_service() {
 # Enable services needed by this desktop config
 enable_service power-profiles-daemon
 enable_service NetworkManager
+enable_service dbus
+enable_service sddm
 # SDDM and DBUS system services should already be enabled per INSTALLATION.md Stage 3
 
 echo "✅ System services checked/enabled."
