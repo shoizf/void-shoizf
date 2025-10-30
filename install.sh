@@ -32,7 +32,8 @@ PACKAGES="
     sddm tmux ripgrep fd tree xorg-server xf86-input-libinput
     dbus-libs dbus-x11 cups cups-filters acpi jq dateutils 
     wlr-randr procps-ng NetworkManager networkmanager-dmenu 
-    nm-tray playerctl unzip flatpak elogind nodejs
+    nm-tray playerctl unzip flatpak elogind nodejs mako
+    lm_sensors
 "
 
 echo "Starting core package installation (will require sudo password)..."

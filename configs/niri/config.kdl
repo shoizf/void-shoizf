@@ -272,22 +272,18 @@ layout {
 spawn-sh-at-startup "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
 
 // --- Start XDG Desktop Portal Services ---
-// Launch the main portal daemon (you already have this package)
 spawn-at-startup "/usr/libexec/xdg-desktop-portal"
+spawn-at-startup "/usr/libexec/xdg-desktop-portal-wlr"
 
 // Launch the GTK backend (the package we just installed)
 spawn-at-startup "/usr/libexec/xdg-desktop-portal-gtk"
 
-// This line starts waybar, a commonly used bar for Wayland compositors.
-spawn-at-startup "waybar"
-
-// This line will start the Elephant service on startup.
+// --- UI utilities ---
 spawn-at-startup "/home/shoi/go/bin/elephant"
-
-// This line will start 'wob' OSD and create its socket.
+spawn-at-startup "waybar"
 spawn-sh-at-startup "mkfifo /home/shoi/.wob.sock || true; exec wob -i /home/shoi/.wob.sock"
 
-// Launch PipeWire service
+// --- Audio / session management ---
 spawn-at-startup "/usr/bin/pipewire"
 spawn-at-startup "/usr/bin/pipewire-pulse"
 spawn-at-startup "/usr/bin/wireplumber"
