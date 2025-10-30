@@ -32,7 +32,7 @@ PACKAGES="
     sddm tmux ripgrep fd tree xorg-server xf86-input-libinput
     dbus-libs dbus-x11 cups cups-filters acpi jq dateutils 
     wlr-randr procps-ng NetworkManager networkmanager-dmenu 
-    nm-tray playerctl unzip flatpak elogind
+    nm-tray playerctl unzip flatpak elogind nodejs
 "
 
 echo "Starting core package installation (will require sudo password)..."
@@ -146,6 +146,17 @@ else
   echo "❌ Intel GPU installer failed!"
 fi
 
+# --- LzyVim and oh my tmux!
+echo "Configuring Developer Tools (Nvim, Tmux)..."
+chmod +x ./installers/dev-tools.sh
+# Pass user and home dir to the script
+if ./installers/dev-tools.sh "$TARGET_USER" "$TARGET_USER_HOME"; then
+  echo "✅ Developer Tools configuration finished successfully!"
+else
+  echo "❌ Developer Tools configuration script failed."
+  # Decide if this is a critical failure, e.g.: exit 1
+fi
+
 # Enable dbus service first (if not already enabled)
 echo "Ensuring dbus service is enabled and running..."
 if [ ! -L /var/service/dbus ]; then
@@ -191,7 +202,6 @@ enable_service() {
 enable_service power-profiles-daemon
 enable_service NetworkManager
 enable_service dbus
-enable_service sddm
 # SDDM and DBUS system services should already be enabled per INSTALLATION.md Stage 3
 
 echo "✅ System services checked/enabled."
