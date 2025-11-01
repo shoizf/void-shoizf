@@ -3,6 +3,43 @@
 // Check the wiki for a full description of the configuration:
 // https://yalter.github.io/niri/Configuration:-Introduction
 
+// Add lines like this to spawn processes at startup.
+// Note that running niri as a session supports xdg-desktop-autostart,
+// which may be more convenient to use.
+// See the binds section below for more spawn examples.
+// ============================
+// Niri Session Startup Sequence
+// ============================
+
+// --- Environment variables ---
+// GTK dark mode
+spawn-sh-at-startup "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
+spawn-sh-at-startup "gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'"
+spawn-sh-at-startup "gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'"
+
+// Qt theme integration
+spawn-sh-at-startup "export QT_QPA_PLATFORMTHEME=qt5ct"
+spawn-sh-at-startup "export QT_QPA_PLATFORMTHEME=qt6ct"
+
+// --- XDG Desktop Portal Services ---
+spawn-at-startup "/usr/libexec/xdg-desktop-portal"
+spawn-at-startup "/usr/libexec/xdg-desktop-portal-wlr"
+spawn-at-startup "/usr/libexec/xdg-desktop-portal-gtk"
+
+// --- UI Utilities ---
+spawn-at-startup "/home/shoi/go/bin/elephant"
+spawn-at-startup "waybar"
+spawn-sh-at-startup "mkfifo /home/shoi/.wob.sock || true; exec wob -i /home/shoi/.wob.sock"
+
+// --- Audio / Session Management ---
+spawn-at-startup "/usr/bin/pipewire"
+spawn-at-startup "/usr/bin/pipewire-pulse"
+spawn-at-startup "/usr/bin/wireplumber"
+
+
+// To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
+// spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"
+
 // Input device configuration.
 // Find the full list of options on the wiki:
 // https://yalter.github.io/niri/Configuration:-Input
@@ -262,34 +299,6 @@ layout {
         // bottom 64
     }
 }
-
-// Add lines like this to spawn processes at startup.
-// Note that running niri as a session supports xdg-desktop-autostart,
-// which may be more convenient to use.
-// See the binds section below for more spawn examples.
-
-// Set theme preference via Settings
-spawn-sh-at-startup "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'"
-
-// --- Start XDG Desktop Portal Services ---
-spawn-at-startup "/usr/libexec/xdg-desktop-portal"
-spawn-at-startup "/usr/libexec/xdg-desktop-portal-wlr"
-
-// Launch the GTK backend (the package we just installed)
-spawn-at-startup "/usr/libexec/xdg-desktop-portal-gtk"
-
-// --- UI utilities ---
-spawn-at-startup "/home/shoi/go/bin/elephant"
-spawn-at-startup "waybar"
-spawn-sh-at-startup "mkfifo /home/shoi/.wob.sock || true; exec wob -i /home/shoi/.wob.sock"
-
-// --- Audio / session management ---
-spawn-at-startup "/usr/bin/pipewire"
-spawn-at-startup "/usr/bin/pipewire-pulse"
-spawn-at-startup "/usr/bin/wireplumber"
-
-// To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
-// spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"
 
 hotkey-overlay {
     // Uncomment this line to disable the "Important Hotkeys" pop-up at startup.

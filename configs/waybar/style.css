@@ -32,7 +32,7 @@
 @define-color temperature-color @yellow;
 @define-color temperature-critical-color @red;
 @define-color battery-color @cyan;
-@define-color battery-charging-color @green;
+@define-color battery-charging-color @gredlen;
 @define-color battery-warning-color @yellow;
 @define-color battery-critical-color @red;
 @define-color network-color @blue;
@@ -51,6 +51,9 @@
 @define-color power-profiles-daemon-performance-color @red;
 @define-color power-profiles-daemon-balanced-color @yellow;
 @define-color power-profiles-daemon-power-saver-color @green;
+@define-color lock-color #00FFFF;
+@define-color reboot-color #FFD700;
+@define-color power-color #FF4040;
 
 * {
     /* Base styling for all modules */
@@ -137,6 +140,25 @@ window#waybar {
 #custom-session-wrap {
     color: @group-session-color;
     border-bottom-color: @group-session-color;
+}
+
+#custom-lock,
+#custom-reboot,
+#custom-power {
+  padding: 0 10px;
+  margin: 0 2px;
+}
+
+#custom-lock {
+  border-bottom: 2px solid @lock-color;
+}
+
+#custom-reboot {
+  border-bottom: 2px solid @reboot-color;
+}
+
+#custom-power {
+  border-bottom: 2px solid @power-color;
 }
 
 /* CORRECTION: Changed #clock to #custom-clock */
@@ -273,9 +295,9 @@ window#waybar {
     border-bottom-color: transparent;
 }
 
-#idle_inhibitor.activated {
-    color: @idle-inhibitor-active-color;
-    border-bottom-color: @idle-inhibitor-active-color;
+#custom-hardware-wrap #idle_inhibitor.activated {
+color: @idle-inhibitor-active-color;
+border-bottom-color: @idle-inhibitor-active-color;
 }
 
 #tray {
