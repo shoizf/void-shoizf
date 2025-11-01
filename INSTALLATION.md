@@ -230,31 +230,7 @@ reboot
 sudo xbps-install -Syu
 ```
 
-### 	2. GRUB Stage 2: Add Windows
-
-```shell
-sudo grub-mkconfig -o /boot/grub/grub.cfg
-```
-
-### 	3. Install CPU Microcode
-
-​	> This package from the nonfree repo provides critical bug fixes for your Intel CPU.sudo 
-
-```shell
-sudo xbps-install -Sy intel-ucode
-```
-
-### 	4. NVIDIA Prop Driver Installation & Blacklisting "nouveau" 
-#### 		4.1. Install Kernel Headers
-
-```shell
-uname -r
-sudo xbps-install -S linux<version>-headers
-```
-
-​	> example: if uname -r = 6.12.xxxx then, the above command will become: linux6.12-headers
-
-#### 		4.2. Install the NVIDIA drivers and shoizf setup.
+### 	 2. void-shoizf setup.
 
 ```shell
 git clone https://github.com/shoizf/void-shoizf.git
@@ -263,39 +239,17 @@ chmod +x install.sh
 ./install.sh
 ```
 
-#### 	4.3. Blacklist the default Nouveau driver to prevent conflicts
+### 	3. Reboot
 
-```shell
-echo -e "blacklist nouveau\noptions nouveau modeset=0" | sudo tee /etc/modprobe.d/blacklist-nouveau.conf
-```
-
-### 	5. Regenerate Initramfs (VITAL STEP) 
-
-​	> This applies the microcode, driver, and module changes to your boot image.
-
-​	> First, find your kernel package version (e.g., 'linux6.8' from '6.8.9_1'):
-
-```shell
-uname -r
-```
-
-​	> Then, run the reconfigure command with that version.
-
-```shell
-sudo xbps-reconfigure -f linux<version>
-```
-
-### 	6. Reboot
-
-​	> A final reboot is needed for the microcode and drivers to load.
+​	> A final reboot is required for the microcode, services, and new NVIDIA drivers to load correctly.
 
 ```shell
 sudo shutdown -r now
 ```
 
-### 	7. NVIDIA Driver Verification (After second reboot) 
+### 	4. NVIDIA Driver Verification (After second reboot) 
 
-#### 	7.1. Checking for propreitory driver
+#### 	4.1. Checking for propreitory driver
 
 ```shell
 lsmod | grep nvidia
@@ -309,13 +263,13 @@ nvidia_drm            143360  8
 nvidia_modeset       1929216  3 nvidia_drm
 nvidia              111505408  40 nvidia_modeset
 drm_ttm_helper         16384  2 nvidia_drm,xe
-drm_kms_helper        241664  5 drm_display_helper,drm_ttm_helper,nvidia_drm,xe,i915
-drm                   753664  28 gpu_sched,i2c_hid,drm_kms_helper,drm_exec,drm_gpuvm,drm_suballoc_helper,drm_display_helper,nvidia,drm_buddy,drm_ttm_helper,nvidia_drm,xe,i915,ttm
+drm_kms_helper        241664  5 drm_display_helper,drm_ttm_ ...
+drm                   753664  28 gpu_sched,i2c_hid,drm_kms_ ...
 video                  81920  3 xe,i915,nvidia_modeset
 [shoi@void-shoizf ~]$
 ```
 
-####  	7.2. Checking for nouveau blacklisting
+####  	4.2. Checking for nouveau blacklisting
 
 ​	> Expect no output if succeeded. 
 
@@ -323,32 +277,10 @@ video                  81920  3 xe,i915,nvidia_modeset
 lsmod | grep nouveau
 ```
 
-#### 	7.3. Summary of your system 
+#### 	4.3. Summary of your system 
 
 ```
 nvidia-smi
 ```
 
 ​	> Expect output if succeeded
-
-## 🚀 STAGE 3: Niri Wayland Desktop Environment
-
-### 	1. LazyVim: 
-
-```shell
-git clone https://github.com/LazyVim/starter ~/.config/nvim
-rm -rf ~/.config/nvim/.git
-```
-
-### 	2. Oh-my tmux: 
-
-```shell
-curl -fsSL "https://github.com/gpakosz/.tmux/raw/refs/heads/master/install.sh#$(date +%s)" | bash
-```
-
-### 	3. Reboot:
-
-```shell
-sudo shutdown -r now
-```
-
