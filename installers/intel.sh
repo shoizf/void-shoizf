@@ -1,22 +1,18 @@
 #!/bin/sh
 
-echo "Installing Intel GPU, audio, and Xorg related packages..."
+echo "Installing Intel GPU and Xorg related packages..."
 
 sudo xbps-install -Sy \
-  mesa-dri \
-  mesa-dri-32bit \
-  mesa-demos \
-  xf86-video-intel \
-  pulseaudio \
-  pulseaudio-utils \
-  pamixer \
-  libpulseaudio \
-  libpulseaudio-32bit \
-  pipewire \
-  alsa-pipewire \
-  wireplumber
+    mesa-dri \
+    mesa-dri-32bit \
+    mesa-demos \
+    xf86-video-intel
 
-echo "Intel GPU and audio packages installed."
+if [ $? -eq 0 ]; then
+    echo "✅ Intel GPU packages installed successfully!"
+else
+    echo "❌ Intel GPU package installation failed!"
+    exit 1
+fi
 
 echo "Intel iGPU setup complete."
-
