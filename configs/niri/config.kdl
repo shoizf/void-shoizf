@@ -35,7 +35,7 @@ spawn-sh-at-startup "mkfifo /home/shoi/.wob.sock || true; exec wob -i /home/shoi
 spawn-at-startup "/usr/bin/pipewire"
 spawn-at-startup "/usr/bin/pipewire-pulse"
 spawn-at-startup "/usr/bin/wireplumber"
-
+spawn-at-startup "hypridle"
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
 // spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"

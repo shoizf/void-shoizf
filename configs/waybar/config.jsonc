@@ -77,7 +77,7 @@
     },
     "custom/lock": {
         "format": "<span color='#00FFFF'>  </span>",
-        "on-click": "swaylock -c 000000",
+        "on-click": "hyprlock",
         "tooltip": true,
         "tooltip-format": "Lock screen"
     },

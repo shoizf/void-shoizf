@@ -25,7 +25,7 @@ PKG_CMD="xbps-install -Sy"
 # List CORE packages (fonts and audio handled by sub-scripts)
 PACKAGES="
     niri xdg-desktop-portal-wlr wayland xwayland-satellite 
-    polkit-kde-agent swaybg swayidle swaylock alacritty 
+    polkit-kde-agent swaybg alacritty 
     walker Waybar wob mpc yazi pcmanfm pavucontrol swayimg 
     gammastep brightnessctl xdg-desktop-portal 
     xdg-desktop-portal-gtk power-profiles-daemon firefox 
@@ -103,8 +103,14 @@ else
   echo "❌ Niri configuration script failed."
 fi
 
-# --- Waybar Configuration Section REMOVED ---
-# Waybar config files (config.jsonc, style.css) will be handled separately later.
+echo "Configuring Hyprlock and Hypridle..."
+chmod +x ./installers/hyprlock.sh
+# Pass user and home dir to the script
+if ./installers/hyprlock.sh "$TARGET_USER" "$TARGET_USER_HOME"; then
+  echo "✅ Hyprlock configuration finished successfully!"
+else
+  echo "❌ Hyprlock configuration script failed."
+fi
 
 echo "Installing SDDM Astronaut theme..."
 chmod +x ./installers/sddm_astronaut.sh
