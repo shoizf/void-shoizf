@@ -1,0 +1,4 @@
+#!/bin/sh
+# Master lock script for the shoizf build.
+# This is called by Waybar and hypridle.
+hyprlock
