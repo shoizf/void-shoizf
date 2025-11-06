@@ -25,7 +25,7 @@ if [[ -n "$artist" && -n "$title" ]]; then
   # Format it like the EnviiLock theme
   artist_spaced=$(echo " $artist" | sed "s/./& /g")
   title_spaced=$(echo "$title " | sed "s/./& /g")
-  echo "╔══════════════════╗ ║  ${artist_spaced}  -  ${title_spaced}  ║ ╚══════════════════╝"
+  echo "╔════════╗ ║  ${artist_spaced}  -  ${title_spaced}  ║ ╚════════╝"
 else
   echo "Nothing Playing"
 fi

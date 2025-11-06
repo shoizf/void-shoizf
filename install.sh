@@ -25,15 +25,14 @@ PKG_CMD="xbps-install -Sy"
 # List CORE packages (fonts and audio handled by sub-scripts)
 PACKAGES="
     niri xdg-desktop-portal-wlr wayland xwayland-satellite 
-    polkit-kde-agent swaybg alacritty 
-    walker Waybar wob mpc yazi pcmanfm pavucontrol swayimg 
+    polkit-kde-agent swaybg alacritty zsh walker Waybar 
+    wob mpc yazi pcmanfm pavucontrol swayimg 
     gammastep brightnessctl xdg-desktop-portal 
     xdg-desktop-portal-gtk power-profiles-daemon firefox 
-    sddm tmux ripgrep fd tree xorg-server xf86-input-libinput
+    sddm tmux ripgrep fd tree xorg-server xf86-input-libinput 
     dbus-libs dbus-x11 cups cups-filters acpi jq dateutils 
-    wlr-randr procps-ng NetworkManager networkmanager-dmenu 
-    nm-tray playerctl unzip flatpak elogind nodejs mako
-    lm_sensors
+    wlr-randr procps-ng playerctl unzip flatpak elogind 
+    nodejs mako lm_sensors wget
 "
 
 echo "Starting core package installation (will require sudo password)..."
@@ -101,6 +100,16 @@ if ./installers/niri.sh "$TARGET_USER" "$TARGET_USER_HOME"; then
   echo "✅ Niri configuration finished successfully!"
 else
   echo "❌ Niri configuration script failed."
+fi
+
+# ... Implementing hyprlock
+
+echo "Configuring Hyprlock and Hypridle..."
+chmod +x ./installers/hyprlock.sh
+if ./installers/hyprlock.sh "$TARGET_USER" "$TARGET_USER_HOME"; then
+  echo "✅ Hyprlock configuration finished successfully!"
+else
+  echo "❌ Hyprlock configuration script failed."
 fi
 
 echo "Configuring Hyprlock and Hypridle..."
