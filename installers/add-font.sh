@@ -28,6 +28,7 @@ FONT_PACKAGES="
     terminus-font
     dejau-fonts-ttf
     liberation-fonts-ttf
+    noto-fonts-cjk
 "
 sudo xbps-install -Sy $FONT_PACKAGES
 if [ $? -ne 0 ]; then
