@@ -223,7 +223,7 @@ sudo sv up dbus
 
 # Run NetworkManager installer script from installers directory
 echo "Executing NetworkManager installer script..."
-chmod +x ./installers/networkmanager.sh
+chmod +x ./installers/networkman.sh
 if ./installers/networkmanager.sh; then
   echo "✅ NetworkManager installer finished successfully!"
 else
