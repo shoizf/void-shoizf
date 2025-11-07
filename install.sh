@@ -32,7 +32,7 @@ PACKAGES="
     sddm tmux ripgrep fd tree xorg-server xf86-input-libinput 
     dbus-libs dbus-x11 cups cups-filters acpi jq dateutils 
     wlr-randr procps-ng playerctl unzip flatpak elogind 
-    nodejs mako lm_sensors wget
+    nodejs mako lm_sensors wget scdoc liblz4-devel
 "
 
 echo "Starting core package installation (will require sudo password)..."
@@ -127,6 +127,15 @@ if ./installers/sddm_astronaut.sh; then
   echo "✅ SDDM Astronaut theme installation finished successfully!"
 else
   echo "❌ SDDM Astronaut theme installation script failed."
+fi
+
+# Setting up some Wallpapers
+echo "Configuring AWWW (Wallpaper Daemon)..."
+chmod +x ./installers/awww.sh
+if ./installers/awww.sh "$TARGET_USER" "$TARGET_USER_HOME"; then
+  echo "✅ AWWW configuration finished successfully!"
+else
+  echo "❌ AWWW configuration script failed."
 fi
 
 echo "Setting up GRUB theme (will require sudo password)..."
