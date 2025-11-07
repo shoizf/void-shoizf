@@ -20,6 +20,35 @@ if [ -z "$TARGET_USER" ] || [ -z "$TARGET_USER_HOME" ]; then
 fi
 echo "Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
 
+# --- CODE BLOCK A: Grant passwordless sudo for current user ---
+echo "🔐 Configuring temporary passwordless sudo..."
+
+# Store current user and timestamped backup
+USER_NAME=$(whoami)
+SUDOERS_FILE="/etc/sudoers"
+BACKUP_FILE="/etc/sudoers.backup.$(date +%s)"
+
+# Backup sudoers safely
+sudo cp -a "$SUDOERS_FILE" "$BACKUP_FILE"
+echo "🧾 Backup created at: $BACKUP_FILE"
+
+# Append NOPASSWD rule for current user (if not already present)
+if ! sudo grep -q "^$USER_NAME" "$SUDOERS_FILE"; then
+  echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" | sudo tee -a "$SUDOERS_FILE" >/dev/null
+  echo "✅ Added passwordless sudo rule for $USER_NAME."
+else
+  echo "ℹ️  User already has sudo rule defined; skipping append."
+fi
+
+# Validate syntax to ensure no lockouts
+if sudo visudo -c >/dev/null 2>&1; then
+  echo "✅ Sudoers syntax check passed."
+else
+  echo "❌ Error: sudoers syntax invalid! Restoring backup..."
+  sudo cp -a "$BACKUP_FILE" "$SUDOERS_FILE"
+  exit 1
+fi
+
 # --- Package Installation ---
 PKG_CMD="xbps-install -Sy"
 # List CORE packages (fonts and audio handled by sub-scripts)
@@ -222,6 +251,26 @@ enable_service() {
     echo "$service_name service already enabled."
   fi
 }
+
+# --- CODE BLOCK B: Restore sudoers from backup ---
+echo "♻️  Restoring original sudoers configuration..."
+
+# Find the most recent backup created by Block A
+LATEST_BACKUP=$(ls -t /etc/sudoers.backup.* 2>/dev/null | head -n 1)
+
+if [ -n "$LATEST_BACKUP" ] && [ -f "$LATEST_BACKUP" ]; then
+  sudo cp -a "$LATEST_BACKUP" /etc/sudoers
+  echo "✅ Restored sudoers from: $LATEST_BACKUP"
+else
+  echo "⚠️  No sudoers backup found. Manual verification recommended!"
+fi
+
+# Validate after restore
+if sudo visudo -c >/dev/null 2>&1; then
+  echo "✅ Sudoers restore verified successfully."
+else
+  echo "❌ Warning: restored sudoers file has syntax issues!"
+fi
 
 # Enable services needed by this desktop config
 enable_service power-profiles-daemon
