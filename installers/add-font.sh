@@ -26,7 +26,7 @@ FONT_PACKAGES="
     font-awesome6
     nerd-fonts-symbols-ttf
     terminus-font
-    dejau-fonts-ttf
+    dejavu-fonts-ttf
     liberation-fonts-ttf
     noto-fonts-cjk
 "
