@@ -26,7 +26,7 @@ PKG_CMD="xbps-install -Sy"
 PACKAGES="
     niri xdg-desktop-portal-wlr wayland xwayland-satellite 
     polkit-kde-agent swaybg alacritty zsh walker Waybar 
-    wob mpc yazi pcmanfm pavucontrol swayimg 
+    wob mpc yazi pcmanfm pavucontrol swayimg cargo
     gammastep brightnessctl xdg-desktop-portal 
     xdg-desktop-portal-gtk power-profiles-daemon firefox 
     sddm tmux ripgrep fd tree xorg-server xf86-input-libinput 
