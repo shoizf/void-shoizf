@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# Determine script directory and repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
 # Font installation script for void-shoizf setup
 # Installs required fonts via xbps and manually downloads/installs others.
 
@@ -74,9 +79,6 @@ else
 fi
 
 # --- Install Symbols Nerd Font (as fallback) ---
-# Note: This is now also installed via xbps, but downloading manually ensures
-# we have it even if the package name changes or isn't available.
-# We can keep this as a robust fallback.
 echo "Downloading Symbols Nerd Font Only (fallback)..."
 SYMBOLS_FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/SymbolsNerdFont-Only.ttf"
 SYMBOLS_FONT_DEST="$FONT_DIR/Symbols Nerd Font Only.ttf"

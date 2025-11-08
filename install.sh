@@ -79,22 +79,26 @@ else
   exit 1
 fi
 
-# --- Package Installation ---
+# --- Package Installation with array and debug ---
 PKG_CMD="xbps-install -Sy"
-PACKAGES="
-  niri xdg-desktop-portal-wlr wayland xwayland-satellite
-  polkit-kde-agent swaybg alacritty zsh walker Waybar wob
-  mpc yazi pcmanfm pavucontrol swayimg cargo gammastep
-  brightnessctl xdg-desktop-portal xdg-desktop-portal-gtk
-  power-profiles-daemon firefox sddm tmux ripgrep fd tree
-  xorg-server xf86-input-libinput dbus-libs dbus-x11 cups
-  cups-filters acpi jq dateutils wlr-randr procps-ng
-  playerctl unzip flatpak elogind nodejs mako lm_sensors
-  wget scdoc liblz4-devel
+read -r -a PACKAGES_ARRAY <<<"
+niri xdg-desktop-portal-wlr wayland xwayland-satellite
+polkit-kde-agent swaybg alacritty zsh walker Waybar wob
+mpc yazi pcmanfm pavucontrol swayimg cargo gammastep
+brightnessctl xdg-desktop-portal xdg-desktop-portal-gtk
+power-profiles-daemon firefox sddm tmux ripgrep fd tree
+xorg-server xf86-input-libinput dbus-libs dbus-x11 cups
+cups-filters acpi jq dateutils wlr-randr procps-ng
+playerctl unzip flatpak elogind nodejs mako lm_sensors
+wget scdoc liblz4-devel
 "
 
 echo "📦 Installing core packages..."
-sudo $PKG_CMD $PACKAGES
+echo "DEBUG: Package list to install:"
+printf "[%s]
+" "${PACKAGES_ARRAY[@]}"
+
+sudo $PKG_CMD "${PACKAGES_ARRAY[@]}"
 echo "✅ Core packages installed successfully!"
 
 # --- Udev Rules for Backlight ---
