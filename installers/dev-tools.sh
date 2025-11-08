@@ -1,10 +1,12 @@
 #!/bin/sh
 
-# Installer for developer tools: LazyVim and Oh My Tmux
-# This script should be run as the regular user, not root.
+# Determine script directory and repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
 
-# --- Determine Target User and Home Directory ---
-# Use arguments passed from parent script, fall back to logname/whoami
+# Installer for developer tools
+
 TARGET_USER=${1:-$(logname || whoami)}
 TARGET_USER_HOME=${2:-$(getent passwd "$TARGET_USER" | cut -d: -f6)}
 
@@ -14,14 +16,11 @@ if [ -z "$TARGET_USER" ] || [ -z "$TARGET_USER_HOME" ]; then
 fi
 echo "Configuring tools for user: $TARGET_USER ($TARGET_USER_HOME)"
 
-# --- 1. Install LazyVim ---
 echo "Configuring LazyVim..."
 NVIM_CONFIG_DIR="$TARGET_USER_HOME/.config/nvim"
 
-# Safety Check: Back up existing config if it exists
 if [ -d "$NVIM_CONFIG_DIR" ]; then
   echo "Found existing Nvim config at $NVIM_CONFIG_DIR. Backing it up..."
-  # Create a timestamped backup
   mv "$NVIM_CONFIG_DIR" "$NVIM_CONFIG_DIR.bak-$(date +%Y%m%d-%H%M%S)"
   if [ $? -ne 0 ]; then
     echo "❌ [dev-tools.sh] Failed to back up existing nvim config. Aborting LazyVim setup."
@@ -29,10 +28,8 @@ if [ -d "$NVIM_CONFIG_DIR" ]; then
   fi
 fi
 
-# Clone the LazyVim starter (using the user's provided command)
 echo "Cloning LazyVim starter..."
 if git clone https://github.com/LazyVim/starter "$NVIM_CONFIG_DIR"; then
-  # Remove the .git directory (using the user's provided command)
   rm -rf "$NVIM_CONFIG_DIR/.git"
   echo "✅ LazyVim configuration finished."
 else
@@ -40,12 +37,8 @@ else
   exit 1
 fi
 
-# --- 2. Install Oh My Tmux ---
 echo "Configuring Oh My Tmux..."
-# We need to run this as the target user. Since this script *is* the target user, we can pipe to bash.
-# Using the user's provided command:
 if curl -fsSL "https://github.com/gpakosz/.tmux/raw/refs/heads/master/install.sh#$(date +%s)" | bash; then
-  # Create the local config file for user customizations
   touch "$TARGET_USER_HOME/.tmux.conf.local"
   echo "✅ Oh My Tmux configuration finished."
   echo "    -> User configuration can be added to ~/.tmux.conf.local"

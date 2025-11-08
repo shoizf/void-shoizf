@@ -1,57 +1,8 @@
-#!/bin/bash
+#!/bin/sh
 
-set -euo pipefail
+# Determine script directory and repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
 
-info() {
-    echo -e "\e[32m✅ $*\e[0m"
-}
-
-warn() {
-    echo -e "\e[33m⚠ $*\e[0m"
-}
-
-error() {
-    echo -e "\e[31m❌ $*\e[0m" >&2
-}
-
-install_base_packages() {
-    info "Installing base system packages..."
-    sudo xbps-install -Sy base-system xbps sudo git coreutils bash
-    info "Base system installed"
-}
-
-configure_system() {
-    info "Configuring system..."
-    # Your system configuration steps here
-    info "System configuration complete"
-}
-
-install_niri() {
-    info "Installing and configuring Niri..."
-    # Your Niri install steps here
-    info "Niri setup complete"
-}
-
-install_sddm_theme() {
-    info "Installing SDDM Astronaut theme..."
-    if [ -x "./installers/sddm_astronaut.sh" ]; then
-        ./installers/sddm_astronaut.sh
-    else
-        error "SDDM theme installer script not found or not executable."
-    fi
-}
-
-
-main() {
-    install_base_packages
-    configure_system
-    install_niri
-
-    # Install SDDM theme via external script
-    install_sddm_theme
-
-    info "Installation complete. Please reboot your system."
-}
-
-main "$@"
-
+# Your template logic here...
