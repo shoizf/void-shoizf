@@ -89,7 +89,7 @@ brightnessctl xdg-desktop-portal xdg-desktop-portal-gtk
 power-profiles-daemon firefox sddm tmux ripgrep fd tree
 xorg-server xf86-input-libinput dbus-libs dbus-x11 cups
 cups-filters acpi jq dateutils wlr-randr procps-ng
-playerctl unzip flatpak elogind nodejs mako lm_sensors
+playerctl lsd unzip flatpak elogind nodejs mako lm_sensors
 wget scdoc liblz4-devel
 "
 
