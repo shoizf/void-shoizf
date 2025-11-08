@@ -11,22 +11,27 @@ set -euo pipefail
 LOG_DIR="/var/log/void-shoizf"
 LOG_FILE="$LOG_DIR/install_$(date '+%Y%m%d_%H%M%S').log"
 
-# Fallback if /var/log is not writable (e.g., user session)
+# Ensure writable log dir (fallback to user space if needed)
 if [ ! -w /var/log ]; then
   LOG_DIR="$HOME/.local/logs/void-shoizf"
-  LOG_FILE="$LOG_DIR/install_$(date '+%Y%m%d_%H%M%S').log"
 fi
 
-mkdir -p "$LOG_DIR" || {
-  echo "❌ Failed to create $LOG_DIR — check permissions."
-  exit 1
-}
+# Create log directory
+if [ ! -d "$LOG_DIR" ]; then
+  if sudo mkdir -p "$LOG_DIR" 2>/dev/null; then
+    sudo chmod 777 "$LOG_DIR"
+  else
+    mkdir -p "$LOG_DIR"
+  fi
+fi
+
+# Create or touch log file
 touch "$LOG_FILE" 2>/dev/null || {
   echo "❌ Cannot create log file at $LOG_FILE"
   exit 1
 }
 
-# Redirect stdout and stderr through tee (logs + terminal)
+# Redirect output to tee (print + write to log)
 set +o pipefail
 exec > >(tee -a "$LOG_FILE") 2>&1
 set -o pipefail
@@ -38,13 +43,13 @@ echo "User: $(whoami)"
 echo "Working directory: $(pwd)"
 echo "------------------------------------------------------------"
 
-# --- Verbose progress (show each command with timestamp) ---
+# Verbose execution trace with timestamps
 PS4='+ [$(date "+%H:%M:%S")] '
 set -x
 
 # --- Check if running as root ---
 if [[ "$(id -u)" -eq 0 ]]; then
-  echo "❌ Don't run this script as root. Exiting!"
+  echo "❌ Don't run as root! Exiting."
   exit 1
 fi
 
@@ -56,11 +61,10 @@ if [[ -z "$TARGET_USER" || -z "$TARGET_USER_HOME" ]]; then
   echo "❌ Could not determine target user or home directory."
   exit 1
 fi
-
 echo "Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
 
-# --- CODE BLOCK A: Grant passwordless sudo temporarily ---
-echo "🔐 Configuring temporary passwordless sudo..."
+# --- CODE BLOCK A: Temporary passwordless sudo ---
+echo "🔐 Granting temporary passwordless sudo..."
 USER_NAME=$(whoami)
 SUDOERS_FILE="/etc/sudoers"
 BACKUP_FILE="/etc/sudoers.backup.$(date +%s)"
@@ -85,7 +89,7 @@ fi
 
 # --- Package Installation ---
 PKG_CMD="xbps-install -Sy"
-PACKAGES=(
+PACKAGES="
   niri xdg-desktop-portal-wlr wayland xwayland-satellite
   polkit-kde-agent swaybg alacritty zsh walker Waybar wob
   mpc yazi pcmanfm pavucontrol swayimg cargo gammastep
@@ -95,10 +99,10 @@ PACKAGES=(
   cups-filters acpi jq dateutils wlr-randr procps-ng
   playerctl unzip flatpak elogind nodejs mako lm_sensors
   wget scdoc liblz4-devel
-)
+"
 
 echo "📦 Installing core packages..."
-sudo $PKG_CMD "${PACKAGES[@]}"
+sudo $PKG_CMD $PACKAGES
 echo "✅ Core packages installed successfully!"
 
 # --- Udev Rules for Backlight ---
@@ -116,8 +120,8 @@ sudo udevadm trigger
 echo "✅ Udev rules for backlight applied."
 
 # --- Add User to Groups ---
-GROUPS_TO_ADD=(video lp input)
-for group in "${GROUPS_TO_ADD[@]}"; do
+GROUPS_TO_ADD="video lp input"
+for group in $GROUPS_TO_ADD; do
   if id -nG "$TARGET_USER" | grep -qw "$group"; then
     echo "User $TARGET_USER already in $group group."
   else
@@ -133,18 +137,12 @@ for script in add-font audio-integration niri hyprlock sddm_astronaut awww grub 
     echo "⚠️ Missing installer script: $script.sh — skipping."
     continue
   fi
-
-  chmod +x "./installers/$script.sh" || {
-    echo "❌ Failed to set executable permission on $script.sh"
-    exit 1
-  }
-
+  chmod +x "./installers/$script.sh"
   if [[ "$script" =~ grub|networkman ]]; then
     sudo "./installers/$script.sh"
   else
     "./installers/$script.sh" "$TARGET_USER" "$TARGET_USER_HOME"
   fi
-
   echo "✅ $script.sh completed successfully!"
 done
 
