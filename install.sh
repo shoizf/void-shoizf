@@ -1,167 +1,177 @@
 #!/usr/bin/env bash
 ###############################################################################
 # Main installation script for void-shoizf setup
+# Logs everything to a timestamped file outside the working directory.
 # Run as a normal user (not root).
 ###############################################################################
 
-set -e
+set -euo pipefail
 
-# --- 1. Initial Setup & Checks ---
+# --- Determine Script Directory and Set as Working Directory ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# Ensure NOT running as root
-if [[ "$(id -u)" -eq 0 ]]; then
-  echo "❌ Do not run this script as root. Run it as your normal user."
-  exit 1
-fi
-
-TARGET_USER=$(whoami)
-TARGET_USER_HOME=$HOME
-echo "🚀 Starting installation for user: $TARGET_USER"
-
-# --- 2. Sudo Keep-Alive (The "Capable" Fix for Password Prompts) ---
-echo "🔑 Root permissions are needed. Please enter your password once."
-if ! sudo -v; then
-  echo "❌ Failed to obtain sudo privileges. Aborting."
-  exit 1
-fi
-
-# Start a background loop to keep sudo alive
-(while true; do
-  sudo -n true
-  sleep 60
-  kill -0 "$$" || exit
-done 2>/dev/null &)
-
-# --- 3. Logging Setup (Fixed for User Permissions) ---
-# We log to the user's home directory to avoid /var/log permission errors.
-LOG_DIR="$TARGET_USER_HOME/.local/state/void-shoizf/logs"
+# --- Logging Setup ---
+LOG_DIR="$HOME/.local/log/void-shoizf"
 mkdir -p "$LOG_DIR"
+
 LOG_FILE="$LOG_DIR/install_$(date '+%Y%m%d_%H%M%S').log"
-touch "$LOG_FILE"
+
+# Create or touch log file
+if ! touch "$LOG_FILE" 2>/dev/null; then
+  echo "❌ Cannot create log file at $LOG_FILE"
+  exit 1
+fi
+
+# Redirect output to tee (print + write to log)
+set +o pipefail
+exec > >(tee -a "$LOG_FILE") 2>&1
+set -o pipefail
 
 echo "📜 Logging to: $LOG_FILE"
-
-# Redirect all future output to both stdout and the log file
-exec > >(tee -a "$LOG_FILE") 2>&1
-
 echo "------------------------------------------------------------"
 echo "Started at: $(date)"
-echo "User: $TARGET_USER"
+echo "User: $(whoami)"
+echo "Working directory: $(pwd)"
 echo "------------------------------------------------------------"
 
-# --- 4. Core Package Installation ---
-# NOTE: Removed hypr*, sway* (handled by child installers)
+# Verbose execution trace with timestamps
+PS4='+ [$(date "+%H:%M:%S")] '
+set -x
+
+# --- Check if running as root ---
+if [[ "$(id -u)" -eq 0 ]]; then
+  echo "❌ Don't run as root! Exiting."
+  exit 1
+fi
+
+# --- Determine Target User and Home Directory ---
+TARGET_USER=$(logname 2>/dev/null || whoami)
+TARGET_USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+
+if [[ -z "$TARGET_USER" || -z "$TARGET_USER_HOME" ]]; then
+  echo "❌ Could not determine target user or home directory."
+  exit 1
+fi
+echo "Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
+
+# --- CODE BLOCK A: Temporary passwordless sudo ---
+echo "🔐 Granting temporary passwordless sudo..."
+USER_NAME=$(whoami)
+SUDOERS_FILE="/etc/sudoers"
+BACKUP_FILE="/etc/sudoers.backup.$(date +%s)"
+
+sudo cp -a "$SUDOERS_FILE" "$BACKUP_FILE"
+echo "🧾 Backup created at: $BACKUP_FILE"
+
+if ! sudo grep -q "^$USER_NAME" "$SUDOERS_FILE"; then
+  echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" | sudo tee -a "$SUDOERS_FILE" >/dev/null
+  echo "✅ Added passwordless sudo rule for $USER_NAME."
+else
+  echo "ℹ️ User already has sudo rule defined; skipping append."
+fi
+
+if sudo visudo -c >/dev/null 2>&1; then
+  echo "✅ Sudoers syntax check passed."
+else
+  echo "❌ Invalid sudoers syntax! Restoring backup..."
+  sudo cp -a "$BACKUP_FILE" "$SUDOERS_FILE"
+  exit 1
+fi
+
+# --- Package Installation ---
+PKG_CMD="xbps-install -Sy"
 PACKAGES="
   niri xdg-desktop-portal-wlr wayland xwayland-satellite
-  polkit-kde-agent alacritty zsh walker Waybar wob
-  mpc yazi pcmanfm pavucontrol swayimg gammastep
+  polkit-kde-agent swaybg alacritty zsh walker Waybar wob
+  mpc yazi pcmanfm pavucontrol swayimg cargo gammastep
   brightnessctl xdg-desktop-portal xdg-desktop-portal-gtk
   power-profiles-daemon firefox sddm tmux ripgrep fd tree
   xorg-server xf86-input-libinput dbus-libs dbus-x11 cups
   cups-filters acpi jq dateutils wlr-randr procps-ng
-  NetworkManager networkmanager-dmenu nm-tray playerctl
-  unzip flatpak elogind nodejs mako lm_sensors
-  wget curl git base-devel
+  playerctl unzip flatpak elogind nodejs mako lm_sensors
+  wget scdoc liblz4-devel
 "
 
-echo "📦 Updating XBPS and installing core packages..."
-sudo xbps-install -Syu
-sudo xbps-install -Sy $PACKAGES
-echo "✅ Core packages installed."
+echo "📦 Installing core packages..."
+sudo $PKG_CMD $PACKAGES
+echo "✅ Core packages installed successfully!"
 
-# --- 5. System Configuration ---
+# --- Udev Rules for Backlight ---
+UDEV_RULES_DIR="/etc/udev/rules.d"
+sudo mkdir -p "$UDEV_RULES_DIR"
+UDEV_RULES_FILE="$UDEV_RULES_DIR/90-backlight.rules"
 
-# Udev rules for backlight (allows brightness control without sudo)
-echo "⚙️ Configuring udev rules for backlight..."
-UDEV_FILE="/etc/udev/rules.d/90-backlight.rules"
-sudo mkdir -p "$(dirname "$UDEV_FILE")"
-cat <<EOF | sudo tee "$UDEV_FILE" >/dev/null
+cat <<'EOF' | sudo tee "$UDEV_RULES_FILE" >/dev/null
 ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness"
 ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
 EOF
+
 sudo udevadm control --reload
 sudo udevadm trigger
+echo "✅ Udev rules for backlight applied."
 
-# Add user to necessary groups
-echo "👤 Adding $TARGET_USER to system groups..."
-for group in video lp input audio network; do
-  # Only add if the group exists
-  if getent group "$group" >/dev/null; then
+# --- Add User to Groups ---
+GROUPS_TO_ADD="video lp input"
+for group in $GROUPS_TO_ADD; do
+  if id -nG "$TARGET_USER" | grep -qw "$group"; then
+    echo "User $TARGET_USER already in $group group."
+  else
     sudo usermod -a -G "$group" "$TARGET_USER"
+    echo "Added user $TARGET_USER to $group group."
   fi
 done
 
-# --- 6. Run Child Installers ---
-# These scripts are expected to be in the ./installers/ directory.
-
-run_installer() {
-  local script="$1"
-  if [[ -f "./installers/$script" ]]; then
-    echo "➡️ Running child installer: $script"
-    chmod +x "./installers/$script"
-    # Pass user variables just in case the script needs them
-    if ./installers/"$script" "$TARGET_USER" "$TARGET_USER_HOME"; then
-      echo "✅ $script finished successfully."
-    else
-      echo "❌ $script FAILED."
-      # We don't exit here so other independent parts can still finish
-    fi
+# --- Run installer scripts ---
+for script in add-font audio-integration niri hyprlock sddm_astronaut awww grub nvidia vulkan-intel intel dev-tools networkman; do
+  echo "⚙️ Running installer: $script.sh ..."
+  if [[ ! -f "./installers/$script.sh" ]]; then
+    echo "⚠️ Missing installer script: $script.sh — skipping."
+    continue
+  fi
+  chmod +x "./installers/$script.sh"
+  if [[ "$script" =~ grub|networkman ]]; then
+    sudo "./installers/$script.sh"
   else
-    echo "⚠️ Warning: Installer '$script' not found."
+    "./installers/$script.sh" "$TARGET_USER" "$TARGET_USER_HOME"
   fi
-}
+  echo "✅ $script.sh completed successfully!"
+done
 
-echo "--- Starting Modular Installers ---"
-
-# Order matters here.
-run_installer "add-font.sh"
-run_installer "audio-integration.sh"
-run_installer "niri.sh"
-run_installer "dev-tools.sh"
-
-# Hyprlock/Idle (Handles its own 3rd party repo)
-run_installer "hyprlock.sh"
-
-# AWWW Wallpaper Daemon (Handles compiling from source)
-run_installer "awww.sh"
-
-# System-level installers (these will use sudo internally)
-run_installer "sddm_astronaut.sh"
-run_installer "grub.sh"
-run_installer "networkmanager.sh"
-
-# GPU Installers (User should ideally only run one, but we'll try them)
-# You might want to make this interactive in the future.
-# run_installer "nvidia.sh"
-# run_installer "intel.sh"
-# run_installer "vulkan-intel.sh"
-echo "⚠️ Skipping GPU installers by default. Run them manually if needed."
-
-# --- 7. Enable Services ---
-echo "🔌 Enabling system services..."
+# --- Enable System Services (runit) ---
+SERVICE_DIR="/var/service"
 enable_service() {
-  local svc="$1"
-  if [ -d "/etc/sv/$svc" ]; then
-    if [ ! -L "/var/service/$svc" ]; then
-      sudo ln -s "/etc/sv/$svc" "/var/service/"
-      echo "   Enabled $svc"
-    else
-      echo "   $svc already enabled."
-    fi
+  local name="$1"
+  local src="/etc/sv/$name"
+  local dest="$SERVICE_DIR/$name"
+  if [[ -d "$src" || -L "$src" ]]; then
+    [[ -L "$dest" ]] || sudo ln -sf "$src" "$dest"
+    echo "✅ Enabled $name service."
+  else
+    echo "⚠️ Service $name not found at $src."
   fi
 }
 
-enable_service dbus
-enable_service elogind
-enable_service polkitd
-enable_service NetworkManager
 enable_service power-profiles-daemon
-# SDDM is usually enabled by its own installer, but good to double-check
-enable_service sddm
+enable_service NetworkManager
+enable_service dbus
 
-# --- 8. Final Wrap-up ---
+# --- CODE BLOCK B: Restore sudoers backup ---
+echo "♻️ Restoring original sudoers..."
+LATEST_BACKUP=$(ls -t /etc/sudoers.backup.* 2>/dev/null | head -n 1)
+if [[ -n "$LATEST_BACKUP" ]]; then
+  sudo cp -a "$LATEST_BACKUP" /etc/sudoers
+  echo "✅ Restored from $LATEST_BACKUP"
+else
+  echo "⚠️ No sudoers backup found."
+fi
+sudo visudo -c >/dev/null 2>&1 && echo "✅ Verified restored sudoers."
+
+# --- Wrap-up ---
+set +x
+echo
+echo "🎉 Installation complete!"
+echo "Log saved at: $LOG_FILE"
+echo "Reboot recommended."
 echo "------------------------------------------------------------"
-echo "🎉 Installation Complete!"
-echo "📜 Full log available at: $LOG_FILE"
-echo "👉 Please REBOOT your system now to apply all changes (groups, udev, services)."
-echo "------------------------------------------------------------"
+echo "Ended at: $(date)"
