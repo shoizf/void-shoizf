@@ -1,12 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
+# installers/audio-integration.sh
 
-# Determine script directory and repo root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$REPO_ROOT"
 
-# Audio Integration Script for void-shoizf setup
-# Installs PipeWire, WirePlumber, ALSA compatibility, and necessary firmware.
+TARGET_USER=${1:-$(logname || whoami)}
+TARGET_USER_HOME=${2:-$(getent passwd "$TARGET_USER" | cut -d: -f6)}
 
 echo "Installing Audio components (PipeWire, WirePlumber, Firmware)..."
 
@@ -26,14 +25,7 @@ linux-firmware
 linux-firmware-intel
 "
 
-sudo xbps-install -Sy $AUDIO_PACKAGES
-
-if [ $? -eq 0 ]; then
-  echo "✅ Audio packages installed successfully!"
-else
-  echo "❌ Audio package installation failed! Check the output for errors."
-  exit 1
-fi
+sudo xbps-install -Sy $AUDIO_PACKAGES || echo "⚠️ Audio packages may have issues."
 
 echo "Configuring ALSA to use PipeWire..."
 sudo mkdir -p /etc/alsa/conf.d

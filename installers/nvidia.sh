@@ -1,21 +1,19 @@
-#!/bin/sh
-set -e
+#!/usr/bin/env bash
+# installers/nvidia.sh
 
-# Determine script directory and repo root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
-
-echo "Starting full NVIDIA driver setup..."
 
 KERNEL_VER=$(uname -r)
 KERNEL_PKG=$(echo "$KERNEL_VER" | cut -d. -f1,2 | sed 's/./_/' | sed 's/_[^0-9]*$//' | sed 's/_/./')
 
 if [ -z "$KERNEL_PKG" ]; then
-  echo "❌ [nvidia.sh] Could not determine kernel package from version: $KERNEL_VER"
+  echo "❌ Could not determine kernel package."
   exit 1
 fi
-echo "Kernel package identified: $KERNEL_PKG"
 
 echo "Installing kernel headers: ${KERNEL_PKG}-headers"
 sudo xbps-install -Sy "${KERNEL_PKG}-headers"
@@ -32,5 +30,4 @@ EOF
 echo "Regenerating initramfs for kernel: $KERNEL_PKG"
 sudo xbps-reconfigure -f "$KERNEL_PKG"
 
-echo "✅ NVIDIA installation and configuration complete."
-echo "   A reboot is required for changes to take effect."
+echo "NVIDIA installation complete. Reboot recommended."
