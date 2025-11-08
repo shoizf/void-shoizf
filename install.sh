@@ -134,6 +134,7 @@ for script in add-font audio-integration niri hyprlock sddm_astronaut awww grub 
     continue
   fi
   chmod +x "./installers/$script.sh"
+  # Run grub and networkman as root, others as user
   if [[ "$script" =~ grub|networkman ]]; then
     sudo "./installers/$script.sh"
   else
