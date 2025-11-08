@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ###############################################################################
 # Main installation script for void-shoizf setup
 # Logs everything to a timestamped file outside the working directory.
@@ -9,62 +9,156 @@ set -euo pipefail
 
 # --- Logging Setup ---
 LOG_DIR="/var/log/void-shoizf"
-TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
-LOG_FILE="$LOG_DIR/install_${TIMESTAMP}.log"
+LOG_FILE="$LOG_DIR/install_$(date '+%Y%m%d_%H%M%S').log"
 
-# Try to create /var/log path with sudo if possible
-if ! sudo mkdir -p "$LOG_DIR" 2>/dev/null || [ ! -w "$LOG_DIR" ]; then
+# Fallback if /var/log is not writable (e.g., user session)
+if [ ! -w /var/log ]; then
   LOG_DIR="$HOME/.local/logs/void-shoizf"
-  mkdir -p "$LOG_DIR"
-  LOG_FILE="$LOG_DIR/install_${TIMESTAMP}.log"
+  LOG_FILE="$LOG_DIR/install_$(date '+%Y%m%d_%H%M%S').log"
 fi
 
-# Create or touch the log file, append all output
-touch "$LOG_FILE"
+mkdir -p "$LOG_DIR" || {
+  echo "❌ Failed to create $LOG_DIR — check permissions."
+  exit 1
+}
+touch "$LOG_FILE" 2>/dev/null || {
+  echo "❌ Cannot create log file at $LOG_FILE"
+  exit 1
+}
+
+# Redirect stdout and stderr through tee (logs + terminal)
+set +o pipefail
 exec > >(tee -a "$LOG_FILE") 2>&1
+set -o pipefail
 
-echo "📘 Logging installation to: $LOG_FILE"
-echo "Starting void-shoizf setup at $(date)"
-echo "---------------------------------------------"
+echo "📜 Logging to: $LOG_FILE"
+echo "------------------------------------------------------------"
+echo "Started at: $(date)"
+echo "User: $(whoami)"
+echo "Working directory: $(pwd)"
+echo "------------------------------------------------------------"
 
-# --- Backup sudoers file & grant passwordless sudo temporarily ---
-SUDOERS_BACKUP="/etc/sudoers.bak_$TIMESTAMP"
+# --- Verbose progress (show each command with timestamp) ---
+PS4='+ [$(date "+%H:%M:%S")] '
+set -x
 
-echo "🔐 Backing up sudoers file to $SUDOERS_BACKUP"
-sudo cp /etc/sudoers "$SUDOERS_BACKUP"
-
-CURRENT_USER="$(whoami)"
-echo "🧩 Temporarily allowing passwordless sudo for $CURRENT_USER"
-echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/void-shoizf-temp >/dev/null
-
-# --- Core installer logic begins here ---
-echo "🚀 Running component installers..."
-
-if ./installers/networkmanager.sh; then
-  echo "✅ NetworkManager installed successfully."
-else
-  echo "❌ NetworkManager installation failed!"
+# --- Check if running as root ---
+if [[ "$(id -u)" -eq 0 ]]; then
+  echo "❌ Don't run this script as root. Exiting!"
+  exit 1
 fi
 
-# --- Enable System Services (runit) ---
-echo "⚙️  Enabling system services (runit)..."
-SERVICE_DIR="/var/service"
+# --- Determine Target User and Home Directory ---
+TARGET_USER=$(logname 2>/dev/null || whoami)
+TARGET_USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
 
-enable_service() {
-  local service_name="$1"
-  local service_path="/etc/sv/$service_name"
-  local target_link="$SERVICE_DIR/$service_name"
+if [[ -z "$TARGET_USER" || -z "$TARGET_USER_HOME" ]]; then
+  echo "❌ Could not determine target user or home directory."
+  exit 1
+fi
 
-  if [ ! -d "$service_path" ]; then
-    echo "❓ Service definition not found: $service_path"
-    return 1
+echo "Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
+
+# --- CODE BLOCK A: Grant passwordless sudo temporarily ---
+echo "🔐 Configuring temporary passwordless sudo..."
+USER_NAME=$(whoami)
+SUDOERS_FILE="/etc/sudoers"
+BACKUP_FILE="/etc/sudoers.backup.$(date +%s)"
+
+sudo cp -a "$SUDOERS_FILE" "$BACKUP_FILE"
+echo "🧾 Backup created at: $BACKUP_FILE"
+
+if ! sudo grep -q "^$USER_NAME" "$SUDOERS_FILE"; then
+  echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" | sudo tee -a "$SUDOERS_FILE" >/dev/null
+  echo "✅ Added passwordless sudo rule for $USER_NAME."
+else
+  echo "ℹ️ User already has sudo rule defined; skipping append."
+fi
+
+if sudo visudo -c >/dev/null 2>&1; then
+  echo "✅ Sudoers syntax check passed."
+else
+  echo "❌ Invalid sudoers syntax! Restoring backup..."
+  sudo cp -a "$BACKUP_FILE" "$SUDOERS_FILE"
+  exit 1
+fi
+
+# --- Package Installation ---
+PKG_CMD="xbps-install -Sy"
+PACKAGES=(
+  niri xdg-desktop-portal-wlr wayland xwayland-satellite
+  polkit-kde-agent swaybg alacritty zsh walker Waybar wob
+  mpc yazi pcmanfm pavucontrol swayimg cargo gammastep
+  brightnessctl xdg-desktop-portal xdg-desktop-portal-gtk
+  power-profiles-daemon firefox sddm tmux ripgrep fd tree
+  xorg-server xf86-input-libinput dbus-libs dbus-x11 cups
+  cups-filters acpi jq dateutils wlr-randr procps-ng
+  playerctl unzip flatpak elogind nodejs mako lm_sensors
+  wget scdoc liblz4-devel
+)
+
+echo "📦 Installing core packages..."
+sudo $PKG_CMD "${PACKAGES[@]}"
+echo "✅ Core packages installed successfully!"
+
+# --- Udev Rules for Backlight ---
+UDEV_RULES_DIR="/etc/udev/rules.d"
+sudo mkdir -p "$UDEV_RULES_DIR"
+UDEV_RULES_FILE="$UDEV_RULES_DIR/90-backlight.rules"
+
+cat <<'EOF' | sudo tee "$UDEV_RULES_FILE" >/dev/null
+ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness"
+ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
+EOF
+
+sudo udevadm control --reload
+sudo udevadm trigger
+echo "✅ Udev rules for backlight applied."
+
+# --- Add User to Groups ---
+GROUPS_TO_ADD=(video lp input)
+for group in "${GROUPS_TO_ADD[@]}"; do
+  if id -nG "$TARGET_USER" | grep -qw "$group"; then
+    echo "User $TARGET_USER already in $group group."
+  else
+    sudo usermod -a -G "$group" "$TARGET_USER"
+    echo "Added user $TARGET_USER to $group group."
+  fi
+done
+
+# --- Run installer scripts ---
+for script in add-font audio-integration niri hyprlock sddm_astronaut awww grub nvidia vulkan-intel intel dev-tools networkman; do
+  echo "⚙️ Running installer: $script.sh ..."
+  if [[ ! -f "./installers/$script.sh" ]]; then
+    echo "⚠️ Missing installer script: $script.sh — skipping."
+    continue
   fi
 
-  if [ ! -L "$target_link" ]; then
-    echo "🔗 Enabling $service_name service..."
-    sudo ln -sf "$service_path" "$SERVICE_DIR/"
+  chmod +x "./installers/$script.sh" || {
+    echo "❌ Failed to set executable permission on $script.sh"
+    exit 1
+  }
+
+  if [[ "$script" =~ grub|networkman ]]; then
+    sudo "./installers/$script.sh"
   else
-    echo "✅ $service_name service already enabled."
+    "./installers/$script.sh" "$TARGET_USER" "$TARGET_USER_HOME"
+  fi
+
+  echo "✅ $script.sh completed successfully!"
+done
+
+# --- Enable System Services (runit) ---
+SERVICE_DIR="/var/service"
+enable_service() {
+  local name="$1"
+  local src="/etc/sv/$name"
+  local dest="$SERVICE_DIR/$name"
+  if [[ -d "$src" || -L "$src" ]]; then
+    [[ -L "$dest" ]] || sudo ln -sf "$src" "$dest"
+    echo "✅ Enabled $name service."
+  else
+    echo "⚠️ Service $name not found at $src."
   fi
 }
 
@@ -72,22 +166,22 @@ enable_service power-profiles-daemon
 enable_service NetworkManager
 enable_service dbus
 
-echo "✅ System services checked/enabled."
-echo "---------------------------------------------"
-
-# --- Cleanup sudoers modification ---
-echo "♻️  Restoring original sudoers configuration..."
-sudo rm -f /etc/sudoers.d/void-shoizf-temp
-
-if [ -f "$SUDOERS_BACKUP" ]; then
-  echo "✅ sudoers restored successfully from $SUDOERS_BACKUP"
+# --- CODE BLOCK B: Restore sudoers backup ---
+echo "♻️ Restoring original sudoers..."
+LATEST_BACKUP=$(ls -t /etc/sudoers.backup.* 2>/dev/null | head -n 1)
+if [[ -n "$LATEST_BACKUP" ]]; then
+  sudo cp -a "$LATEST_BACKUP" /etc/sudoers
+  echo "✅ Restored from $LATEST_BACKUP"
 else
-  echo "⚠️  Warning: sudoers backup not found — manual verification recommended!"
+  echo "⚠️ No sudoers backup found."
 fi
+sudo visudo -c >/dev/null 2>&1 && echo "✅ Verified restored sudoers."
 
-# --- Final messages ---
-echo "🎉 Main installation script completed!"
-echo "📋 Logs saved at: $LOG_FILE"
-echo "🌀 Please review and address any manual steps if required."
-echo "💡 Waybar configuration needs to be updated manually."
-echo "🔁 A final reboot is recommended."
+# --- Wrap-up ---
+set +x
+echo
+echo "🎉 Installation complete!"
+echo "Log saved at: $LOG_FILE"
+echo "Reboot recommended."
+echo "------------------------------------------------------------"
+echo "Ended at: $(date)"
