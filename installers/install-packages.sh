@@ -10,7 +10,7 @@ echo "--- [Core Packages Installer] ---"
 
 # Use the reliable array format
 PACKAGES_ARRAY=(
-  "niri" "xdg-desktop-portal-wlr" "wayland" "xwayland-satellite"
+  "xbps" "niri" "xdg-desktop-portal-wlr" "wayland" "xwayland-satellite"
   "polkit-kde-agent" "swaybg" "alacritty" "zsh" "walker" "Waybar" "wob"
   "mpc" "yazi" "pcmanfm" "pavucontrol" "swayimg" "cargo" "gammastep"
   "brightnessctl" "xdg-desktop-portal" "xdg-desktop-portal-gtk"

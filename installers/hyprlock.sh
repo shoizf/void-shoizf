@@ -23,9 +23,9 @@ else
 fi
 
 # 2. Install hyprlock and hypridle
-# FIX: Add '-y' to auto-approve the repository key and installation
 echo "Syncing repositories and installing hyprlock/hypridle..."
-sudo xbps-install -Sy -y hyprlock hypridle
+sudo xbps-install -S -y 
+sudo xbps-install -Sy hyprlock hypridle
 
 # 3. Copy configuration files from repo to user's config
 SOURCE_CONFIG_DIR="$REPO_ROOT/configs/hypr"
