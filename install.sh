@@ -105,7 +105,7 @@ for group in $GROUPS_TO_ADD; do
 done
 
 # --- Run installer scripts ---
-for script in install-packages add-font audio-integration niri hyprlock sddm_astronaut awww grub nvidia vulkan-intel intel dev-tools networkman; do
+for script in install-packages add-font audio-integration niri waybar hyprlock sddm_astronaut awww grub nvidia vulkan-intel intel dev-tools networkman; do
   echo "⚙️ Running installer: $script.sh ..."
   if [[ ! -f "./installers/$script.sh" ]]; then
     echo "⚠️ Missing installer script: $script.sh — skipping."
