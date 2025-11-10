@@ -176,24 +176,6 @@ xbps-install -S grub-x86_64-efi efibootmgr os-prober ntfs-3g
 echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 ```
 
-​	> Add the following:  
-
-```shell
-nvim /etc/default/grub
-"nvidia-drm.modeset=1"
-```
-
-​	> To the end of the line:
-
-```shell
-GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"
-```
-
-​	> The new line should now look like: 
-
-```shell
-GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4 ... nvidia-drm.modeset=1"
-```
 
 ​	> In nvim: 
 
