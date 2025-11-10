@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # installers/grub.sh
+# This script now installs and configures GRUB.
 
 set -euo pipefail
 
@@ -23,14 +24,14 @@ log_error() {
 trap 'rm -rf "$WORKDIR"' EXIT
 
 log_info "Starting GRUB & Boot setup..."
-
-log_info "Requesting root permissions (will prompt if necessary)..."
+log_info "Requesting root permissions..."
 if ! sudo -v; then
   log_error "Failed to obtain root permissions."
 fi
 
-log_info "Installing Intel CPU microcode..."
-sudo xbps-install -Sy intel-ucode
+log_info "Installing GRUB packages, Intel microcode, and os-prober..."
+# We add grub-x86_64-efi and os-prober to ensure they are installed
+sudo xbps-install -Sy -y intel-ucode grub-x86_64-efi os-prober
 
 log_info "Cloning GRUB theme repository into temporary directory $WORKDIR..."
 if ! git clone --depth 1 "$THEME_REPO" "$WORKDIR"; then
@@ -55,6 +56,14 @@ if ! sudo grep -q "^GRUB_DISABLE_OS_PROBER=" /etc/default/grub; then
 else
   sudo sed -i "s|^GRUB_DISABLE_OS_PROBER=.*|GRUB_DISABLE_OS_PROBER=false|" /etc/default/grub
 fi
+
+# --- NEW COMMAND ---
+log_info "Installing GRUB to EFI partition with bootloader-id 'shoizf'..."
+# This installs the bootloader to the EFI partition with your custom ID.
+if ! sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=shoizf --recheck; then
+  log_error "Failed to install GRUB to EFI partition."
+fi
+# --- END NEW COMMAND ---
 
 log_info "Generating GRUB configuration including OS prober..."
 if ! sudo grub-mkconfig -o /boot/grub/grub.cfg; then

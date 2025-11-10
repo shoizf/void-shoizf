@@ -22,12 +22,34 @@ else
   exit 1
 fi
 
-echo "Installing Oh My Tmux..."
-if curl -fsSL "https://github.com/gpakosz/.tmux/raw/refs/heads/master/install.sh#$(date +%s)" | bash; then
-  touch "$TARGET_USER_HOME/.tmux.conf.local"
+echo "Installing Oh My Tmux (non-interactive)..."
+
+# Define paths
+TMUX_DIR="$TARGET_USER_HOME/.tmux"
+REPO_URL="https://github.com/gpakosz/.tmux.git"
+
+# 1. Clone or update the repo
+if [ -d "$TMUX_DIR" ]; then
+  echo "Updating existing Oh My Tmux repo..."
+  if ! git -C "$TMUX_DIR" pull; then
+    echo "Git pull failed, removing and re-cloning."
+    rm -rf "$TMUX_DIR"
+    git clone --depth=1 "$REPO_URL" "$TMUX_DIR"
+  fi
 else
-  echo "❌ [dev-tools.sh] Failed to install Oh My Tmux."
-  exit 1
+  echo "Cloning Oh My Tmux repo..."
+  git clone --depth=1 "$REPO_URL" "$TMUX_DIR"
 fi
+
+# 2. Create the main symlink
+# 'ln -sfn' forces the creation of the symlink.
+echo "Creating symlink for .tmux.conf..."
+ln -sfn "$TMUX_DIR/.tmux.conf" "$TARGET_USER_HOME/.tmux.conf"
+
+# 3. Create the local config file
+echo "Creating .tmux.conf.local..."
+touch "$TARGET_USER_HOME/.tmux.conf.local"
+
+echo "✅ Oh My Tmux installed."
 
 echo "✅ Developer tools configured successfully."
