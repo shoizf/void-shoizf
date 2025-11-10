@@ -46,7 +46,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 fi
 
 # --- Determine Target User and Home Directory ---
-TARGET_USER=$(logname 2>/dev/null || whoami)
+TARGET_USER=$(whoami)
 TARGET_USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
 
 if [[ -z "$TARGET_USER" || -z "$TARGET_USER_HOME" ]]; then
@@ -79,28 +79,6 @@ else
   exit 1
 fi
 
-# --- Package Installation with array and debug ---
-PKG_CMD="xbps-install -Sy"
-read -r -a PACKAGES_ARRAY <<<"
-niri xdg-desktop-portal-wlr wayland xwayland-satellite
-polkit-kde-agent swaybg alacritty zsh walker Waybar wob
-mpc yazi pcmanfm pavucontrol swayimg cargo gammastep
-brightnessctl xdg-desktop-portal xdg-desktop-portal-gtk
-power-profiles-daemon firefox sddm tmux ripgrep fd tree
-xorg-server xf86-input-libinput dbus-libs dbus-x11 cups
-cups-filters acpi jq dateutils wlr-randr procps-ng
-playerctl lsd unzip flatpak elogind nodejs mako lm_sensors
-wget scdoc liblz4-devel
-"
-
-echo "📦 Installing core packages..."
-echo "DEBUG: Package list to install:"
-printf "[%s]
-" "${PACKAGES_ARRAY[@]}"
-
-sudo $PKG_CMD "${PACKAGES_ARRAY[@]}"
-echo "✅ Core packages installed successfully!"
-
 # --- Udev Rules for Backlight ---
 UDEV_RULES_DIR="/etc/udev/rules.d"
 sudo mkdir -p "$UDEV_RULES_DIR"
@@ -127,7 +105,7 @@ for group in $GROUPS_TO_ADD; do
 done
 
 # --- Run installer scripts ---
-for script in add-font audio-integration niri hyprlock sddm_astronaut awww grub nvidia vulkan-intel intel dev-tools networkman; do
+for script in install-packages add-font audio-integration niri hyprlock sddm_astronaut awww grub nvidia vulkan-intel intel dev-tools networkman; do
   echo "⚙️ Running installer: $script.sh ..."
   if [[ ! -f "./installers/$script.sh" ]]; then
     echo "⚠️ Missing installer script: $script.sh — skipping."
@@ -135,7 +113,7 @@ for script in add-font audio-integration niri hyprlock sddm_astronaut awww grub 
   fi
   chmod +x "./installers/$script.sh"
   # Run grub and networkman as root, others as user
-  if [[ "$script" =~ grub|networkman ]]; then
+  if [[ "$script" =~ install-packages|grub|networkman ]]; then
     sudo "./installers/$script.sh"
   else
     "./installers/$script.sh" "$TARGET_USER" "$TARGET_USER_HOME"

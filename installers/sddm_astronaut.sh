@@ -12,9 +12,9 @@ echo "Installing SDDM Astronaut theme..."
 sudo xbps-install -Sy sddm qt6-svg qt6-virtualkeyboard qt6-multimedia
 
 if [ -d /usr/share/sddm/themes/sddm-astronaut-theme ]; then
-  echo "Theme directory exists, skipping clone."
+	echo "Theme directory exists, skipping clone."
 else
-  sudo git clone -b master --depth 1 https://github.com/Keyitdev/sddm-astronaut-theme.git /usr/share/sddm/themes/sddm-astronaut-theme
+	sudo git clone -b master --depth 1 https://github.com/Keyitdev/sddm-astronaut-theme.git /usr/share/sddm/themes/sddm-astronaut-theme
 fi
 
 sudo cp -r /usr/share/sddm/themes/sddm-astronaut-theme/Fonts/* /usr/share/fonts/
@@ -29,7 +29,8 @@ InputMethod=qtvirtualkeyboard" | sudo tee /etc/sddm.conf.d/virtualkbd.conf
 sudo sed -i 's|^ConfigFile=.*|ConfigFile=Themes/jake_the_dog.conf|' /usr/share/sddm/themes/sddm-astronaut-theme/metadata.desktop
 
 if [ ! -L /var/service/sddm ]; then
-  sudo ln -s /etc/sv/sddm /var/service/sddm
+	sudo ln -s /etc/sv/sddm /var/service/sddm
+	sudo sv down sddm
 fi
 
 echo "SDDM Astronaut theme installed."
