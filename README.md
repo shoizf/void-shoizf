@@ -81,7 +81,7 @@ Anyone who:
 ## How to Use
 
 **Do not follow this README for step-by-step instructions!**
- Please see [`INSTALLATION.md`](https://www.perplexity.ai/search/INSTALLATION.md) for comprehensive installation and configuration steps.
+ Please see [`INSTALLATION.md`](https://github.com/shoizf/void-shoizf/blob/main/INSTALLATION.md) for comprehensive installation and configuration steps.
 
 Everything you need beyond the minimal OS install and partition setup is automated and handled through scripts in this repo.
 
