@@ -135,7 +135,7 @@ ln -sf /usr/share/zoneinfo/Asia/Dubai /etc/localtime
 
 ```shell
 passwd
-useradd -m -s /bin/bash -G wheel,audio,video,input,network,storage, <uname>
+useradd -m -s /bin/bash -G wheel,audio,video,input,network,storage <uname>
 passwd <uname>
 ```
 
@@ -175,10 +175,7 @@ xbps-install -S grub-x86_64-efi efibootmgr os-prober ntfs-3g
 ```shell
 echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 ```
-
-
 ​	> In nvim: 
-
 ​	> i - for insert mode, Esc, :wq to exit with changes. 
 
 ##### 	3.4.2. Install GRUB to the EFI directory
@@ -196,7 +193,6 @@ grub-mkconfig -o /boot/grub/grub.cfg
 #### 	3.5. Finalization
 
 ​	> Final reconfiguration, exit, and reboot!
-
 ```shell
 xbps-reconfigure -fa
 exit
@@ -266,3 +262,4 @@ nvidia-smi
 ```
 
 ​	> Expect output if succeeded
+
