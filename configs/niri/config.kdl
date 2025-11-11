@@ -31,11 +31,16 @@ spawn-at-startup "/home/shoi/go/bin/elephant"
 spawn-at-startup "waybar"
 spawn-sh-at-startup "mkfifo /home/shoi/.wob.sock || true; exec wob -i /home/shoi/.wob.sock"
 
-// --- Audio / Session Management ---
+// --- Audio ---
 spawn-at-startup "/usr/bin/pipewire"
 spawn-at-startup "/usr/bin/pipewire-pulse"
 spawn-at-startup "/usr/bin/wireplumber"
+
+// --- Session Management ---
 spawn-at-startup "hypridle"
+spawn-sh-at-startup "~/.local/bin/musi-info.sh"
+spawn-sh-at-startup "~/.local/bin/music-progress.sh"
+spawn-sh-at-startup "~/.local/bin/battery-status.sh"
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
 // spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"

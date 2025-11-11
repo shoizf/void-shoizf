@@ -1,31 +1,36 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# =============================================================================
+# music-info.sh — Displays current playing track (Artist - Title)
 #
-# music-info.sh
-#
-# Original "EnviiLock" theme and logic by Kaushallrai
-# https://github.com/Kaushallrai/hyprlock
-#
-# Modified for 'shoizf' setup:
-# - Flexible player: Grabs the *first* ("oldest") player from playerctl.
-#
+# 🎵 Compatible with playerctl (MPRIS)
+# 🧠 Credits:
+#   - Original logic from Kaushallrai’s EnviiLock (Hyprlock theme)
+#   - Modified for 'void-shoizf' — flexible player detection
+# =============================================================================
 
-# Get the first player listed by playerctl (the "oldest" one)
+set -euo pipefail
+
+# Get the first (oldest) available MPRIS player
 player=$(playerctl -l 2>/dev/null | head -n 1)
 
-if [ -z "$player" ]; then
-  echo "Nothing Playing"
-  exit
+# If no player found
+if [[ -z "$player" ]]; then
+  echo "No Player Active"
+  exit 0
 fi
 
-# Get metadata from that specific "oldest" player
-artist=$(playerctl -p "$player" metadata artist 2>/dev/null)
-title=$(playerctl -p "$player" metadata title 2>/dev/null)
+status=$(playerctl -p "$player" status 2>/dev/null || echo "Stopped")
 
-if [[ -n "$artist" && -n "$title" ]]; then
-  # Format it like the EnviiLock theme
-  artist_spaced=$(echo " $artist" | sed "s/./& /g")
-  title_spaced=$(echo "$title " | sed "s/./& /g")
-  echo "╔════════╗ ║  ${artist_spaced}  -  ${title_spaced}  ║ ╚════════╝"
-else
-  echo "Nothing Playing"
+if [[ "$status" != "Playing" ]]; then
+  echo "Paused"
+  exit 0
 fi
+
+artist=$(playerctl -p "$player" metadata artist 2>/dev/null || echo "Unknown Artist")
+title=$(playerctl -p "$player" metadata title 2>/dev/null || echo "Unknown Title")
+
+# Trim long strings
+artist="${artist:0:30}"
+title="${title:0:45}"
+
+echo "$artist - $title"
