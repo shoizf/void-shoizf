@@ -78,6 +78,21 @@ Anyone who:
 
 ------
 
+## Contributing
+
+Contributions, feedback, and ideas are warmly welcomed!
+
+Please review the [**CONTRIBUTING.md**](https://github.com/shoizf/void-shoizf/blob/main/CONTRIBUTING.md) guide before opening issues or pull requests.
+It outlines this project's:
+- Branching and commit message conventions  
+- Script and installer standards  
+- Testing expectations for bare-metal and VM setups  
+- Workflow for proposing and reviewing changes  
+
+Following these ensures the repo remains clean, consistent, and reproducible for everyone.
+
+------
+
 ## How to Use
 
 **Do not follow this README for step-by-step instructions!**
