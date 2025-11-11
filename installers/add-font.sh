@@ -1,67 +1,88 @@
 #!/usr/bin/env bash
-# installers/add-font.sh
+# =============================================================================
+# add-font.sh — Installs Hyprlock + Developer fonts locally for the current user
+# Works on: Void Linux
+#
+# 📦 Installs system base fonts (via xbps)
+# 🪶 Copies Hyprlock custom OTF fonts from assets/fonts/** → ~/.local/share/fonts/custom/
+# 🪵 Logs actions to ~/.local/log/void-shoizf/add-font.log
+#
+# 🧠 Credits:
+#   - Original Hyprlock configuration & fonts concept from Kaushal (Envii)
+#     Source: https://github.com/Makrennel/hyprlock
+# =============================================================================
 
-# Determine script directory and repo root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+set -euo pipefail
 
-# Determine Target User and Home Directory
-TARGET_USER=${1:-$(logname || whoami)}
-TARGET_USER_HOME=${2:-$(getent passwd "$TARGET_USER" | cut -d: -f6)}
+# --- Path setup ---
+REPO_DIR="$(dirname "$(realpath "$0")")/.."
+ASSET_DIR="$REPO_DIR/assets/fonts"
+LOG_DIR="$HOME/.local/log/void-shoizf"
+FONT_DIR="$HOME/.local/share/fonts"
+CUSTOM_DIR="$FONT_DIR/custom"
 
-if [ -z "$TARGET_USER" ] || [ -z "$TARGET_USER_HOME" ]; then
-  echo "❌ [add-font.sh] Could not determine target user or home directory."
-  exit 1
-fi
+mkdir -p "$LOG_DIR" "$CUSTOM_DIR"
 
-FONT_DIR="$TARGET_USER_HOME/.local/share/fonts"
-SHARE_DIR="$TARGET_USER_HOME/.local/share"
+LOG_FILE="$LOG_DIR/add-font.log"
 
-echo "Installing font packages via xbps (sudo required)..."
-FONT_PACKAGES="
-    noto-fonts-emoji
-    font-firacode
-    font-awesome
-    font-awesome5
-    font-awesome6
-    nerd-fonts-symbols-ttf
-    terminus-font
-    dejavu-fonts-ttf
-    liberation-fonts-ttf
-    noto-fonts-cjk
-"
-sudo xbps-install -Sy $FONT_PACKAGES || echo "⚠️ Some font packages may not have installed properly."
+# --- Logging setup ---
+exec > >(tee -a "$LOG_FILE") 2>&1
+timestamp() { date +"[%Y-%m-%d %H:%M:%S]"; }
 
-echo "Ensuring font directory exists: $FONT_DIR"
-mkdir -p "$FONT_DIR"
+echo "$(timestamp) 🧾 Logging to: $LOG_FILE"
+echo "$(timestamp) 🔧 Installing developer + Hyprlock fonts for user: $USER"
+echo "$(timestamp) ------------------------------------------------------------"
 
-if ! command -v curl >/dev/null || ! command -v unzip >/dev/null; then
-  echo "Installing curl and unzip (sudo required)..."
-  sudo xbps-install -Sy curl unzip
-fi
+# --- Step 1: Install system fonts via XBPS ---
+echo "$(timestamp) 📦 Installing base font packages..."
+sudo xbps-install -Sy \
+  font-awesome font-awesome5 font-awesome6 nerd-fonts-symbols-ttf \
+  terminus-font dejavu-fonts-ttf liberation-fonts-ttf \
+  noto-fonts-cjk noto-fonts-emoji font-firacode ||
+  echo "$(timestamp) ⚠️ Some base fonts might already be installed or failed to update."
 
-echo "Downloading JetBrains Mono Nerd Font..."
-JB_ZIP_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
-JB_ZIP_DEST="$SHARE_DIR/JetBrainsMono.zip"
+# --- Step 2: Copy bundled OTF fonts from assets ---
+echo "$(timestamp) 📁 Installing Hyprlock custom fonts from assets directory..."
 
-if curl -fLo "$JB_ZIP_DEST" "$JB_ZIP_URL"; then
-  echo "Extracting JetBrains Mono Nerd Font to $FONT_DIR..."
-  unzip -o "$JB_ZIP_DEST" -d "$FONT_DIR"
-  rm -f "$JB_ZIP_DEST"
+declare -A FONT_PATHS=(
+  ["Metropolis-Medium.otf"]="$ASSET_DIR/metropolis/Metropolis-Medium.otf"
+  ["SFPRODISPLAYMEDIUM.OTF"]="$ASSET_DIR/sf-pro-display/SFPRODISPLAYMEDIUM.OTF"
+  ["Stange Bold OTF.otf"]="$ASSET_DIR/stange/Stange Bold OTF.otf"
+)
+
+for font in "${!FONT_PATHS[@]}"; do
+  SRC="${FONT_PATHS[$font]}"
+  DEST="$CUSTOM_DIR/$font"
+
+  if [[ -f "$DEST" ]]; then
+    echo "$(timestamp) ♻️ Removing old version of $font..."
+    rm -f "$DEST"
+  fi
+
+  if [[ -f "$SRC" ]]; then
+    echo "$(timestamp) 📦 Installing new version of $font..."
+    cp "$SRC" "$DEST"
+    chmod 644 "$DEST"
+    echo "$(timestamp) ✅ $font successfully updated."
+  else
+    echo "$(timestamp) ⚠️ Missing font in repo: $SRC"
+  fi
+done
+
+# --- Step 3: Refresh font cache ---
+echo "$(timestamp) 🔄 Refreshing font cache..."
+if [[ -d "$HOME/.fontconfig" ]]; then
+  # If legacy directory exists, show full fc-cache output (for transparency)
+  fc-cache -fv "$FONT_DIR"
 else
-  echo "❌ [add-font.sh] Failed to download JetBrains Mono Nerd Font."
-  exit 1
+  # Otherwise, hide only the benign “not cleaning non-existent cache directory” notice
+  fc-cache -fv "$FONT_DIR" 2>&1 | grep -v "not cleaning non-existent cache directory"
 fi
 
-echo "Downloading Symbols Nerd Font Only (fallback)..."
-SYMBOLS_FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/SymbolsNerdFont-Only.ttf"
-SYMBOLS_FONT_DEST="$FONT_DIR/Symbols Nerd Font Only.ttf"
+# --- Step 4: Verification summary ---
+echo "$(timestamp) 🧩 Installed custom fonts:"
+find "$CUSTOM_DIR" -type f -iname "*.otf" | sed 's/^/   /'
 
-if ! curl -fLo "$SYMBOLS_FONT_DEST" "$SYMBOLS_FONT_URL"; then
-  echo "⚠️ [add-font.sh] Warning: Symbols font download failed."
-fi
-
-echo "Refreshing font cache..."
-sudo -u "$TARGET_USER" fc-cache -f -v
-
-echo "✅ Font installation script finished."
+echo "$(timestamp) ------------------------------------------------------------"
+echo "$(timestamp) 🎉 Font installation completed successfully for $USER."
+echo "$(timestamp) 🪶 Log saved to: $LOG_FILE"

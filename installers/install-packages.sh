@@ -18,7 +18,7 @@ PACKAGES_ARRAY=(
   "xorg-server" "xf86-input-libinput" "dbus-libs" "dbus-x11" "cups"
   "cups-filters" "acpi" "jq" "dateutils" "wlr-randr" "procps-ng"
   "playerctl" "lsd" "unzip" "flatpak" "elogind" "nodejs" "mako" "lm_sensors"
-  "wget" "scdoc" "liblz4-devel"
+  "wget" "scdoc" "liblz4-devel" "dolphin" "qalculate-qt"
 )
 
 echo "📦 Installing core packages..."
