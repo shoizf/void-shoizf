@@ -10,15 +10,18 @@ echo "--- [Core Packages Installer] ---"
 
 # Use the reliable array format
 PACKAGES_ARRAY=(
-  "xbps" "niri" "xdg-desktop-portal-wlr" "wayland" "xwayland-satellite"
-  "polkit-kde-agent" "swaybg" "alacritty" "zsh" "walker" "Waybar" "wob"
-  "mpc" "yazi" "pcmanfm" "pavucontrol" "swayimg" "cargo" "gammastep"
+  "niri" "xdg-utils" "xdg-desktop-portal-wlr" "wayland"
+  "xwayland-satellite" "polkit-kde-agent" "swaybg"
+  "alacritty" "zsh" "walker" "Waybar" "wob" "mpc" "yazi"
+  "pcmanfm" "pavucontrol" "swayimg" "cargo" "gammastep"
   "brightnessctl" "xdg-desktop-portal" "xdg-desktop-portal-gtk"
-  "power-profiles-daemon" "firefox" "sddm" "tmux" "ripgrep" "fd" "tree"
-  "xorg-server" "xf86-input-libinput" "dbus-libs" "dbus-x11" "cups"
-  "cups-filters" "acpi" "jq" "dateutils" "wlr-randr" "procps-ng"
-  "playerctl" "lsd" "unzip" "flatpak" "elogind" "nodejs" "mako" "lm_sensors"
-  "wget" "scdoc" "liblz4-devel" "dolphin" "qalculate-qt"
+  "power-profiles-daemon" "firefox" "sddm" "tmux" "ripgrep"
+  "fd" "tree" "xorg-server" "xf86-input-libinput" "dbus-libs"
+  "dbus-x11" "cups" "cups-filters" "acpi" "jq" "dateutils"
+  "wlr-randr" "procps-ng" "playerctl" "lsd" "unzip"
+  "flatpak" "elogind" "nodejs" "mako" "wget" "scdoc"
+  "liblz4-devel" "dolphin" "qalculate-qt" "curl" "git"
+  "desktop-file-utils" "gtk+3" "lm_sensors" "neovim"
 )
 
 echo "📦 Installing core packages..."
