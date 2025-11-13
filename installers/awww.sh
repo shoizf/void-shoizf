@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # installers/awww.sh
-# Final robust version for clean install
+# Final robust version for clean install of 'awww' and wallpaper cycler
 
 set -euo pipefail # Stop on any error
 
@@ -21,7 +21,6 @@ echo "Configuring for user: $TARGET_USER ($TARGET_USER_HOME)"
 
 # --- 1. Install Build Dependencies ---
 echo "Installing build dependencies (gcc, git, pkg-config, etc)..."
-# We add '-y' to auto-approve all prompts.
 sudo xbps-install -Sy -y \
   gcc \
   git \
@@ -34,13 +33,11 @@ sudo xbps-install -Sy -y \
   wget || echo "⚠️  Some dependencies may already be installed."
 
 # --- 2. Protect Build Tools ---
-# This "protects" gcc and pkg-config from being removed.
 echo "Protecting build tools from removal..."
 sudo xbps-pkgdb -m manual gcc pkg-config
 
 # --- 3. Remove Conflicting System Rust ---
 echo "Removing system 'rust' package (if present) to install rustup..."
-# We add '|| true' in case 'rust' isn't installed (which is fine)
 sudo xbps-remove -RF -y rust || true
 
 # --- 4. Install Rustup (as the user) ---
@@ -50,7 +47,6 @@ if ! command -v rustup >/dev/null 2>&1; then
 fi
 
 # --- 5. Set the PATH for this script session ---
-# This is the critical fix for 'rustc: command not found'
 echo "Manually adding Cargo to PATH for this session..."
 export PATH="$TARGET_USER_HOME/.cargo/bin:$PATH"
 
@@ -81,15 +77,12 @@ fi
 
 # --- 8. Build 'awww' (Robustly) ---
 echo "Building 'awww' in release mode..."
-# We 'cd' into the directory, build, and then 'cd' back.
-# If 'cargo build' fails, 'set -e' is guaranteed to stop the script.
 cd "$AWWW_DIR"
 if ! cargo build --release; then
   echo "❌ [awww.sh] Cargo build FAILED!"
-  cd "$REPO_ROOT" # Go back before exiting
+  cd "$REPO_ROOT"
   exit 1
 fi
-# Go back to the original script directory
 cd "$REPO_ROOT"
 echo "✅ Build successful."
 
@@ -97,14 +90,28 @@ echo "✅ Build successful."
 echo "Installing 'awww' and 'awww-daemon' binaries to /usr/bin/..."
 sudo cp "$AWWW_DIR/target/release/awww" /usr/bin/awww
 sudo cp "$AWWW_DIR/target/release/awww-daemon" /usr/bin/awww-daemon
+sudo chmod 755 /usr/bin/awww /usr/bin/awww-daemon
 
 # --- 10. Install User Scripts ---
 echo "Installing wallpaper cycler script..."
-mkdir -p "$TARGET_USER_HOME/.local/bin"
-cp "$REPO_ROOT/bin/wallpaper-cycler.sh" "$TARGET_USER_HOME/.local/bin/wallpaper-cycler.sh"
-chmod +x "$TARGET_USER_HOME/.local/bin/wallpaper-cycler.sh"
+USER_BIN_DIR="$TARGET_USER_HOME/.local/bin"
+mkdir -p "$USER_BIN_DIR"
+cp "$REPO_ROOT/bin/wallpaper-cycler.sh" "$USER_BIN_DIR/wallpaper-cycler.sh"
+chmod +x "$USER_BIN_DIR/wallpaper-cycler.sh"
+sudo chown "$TARGET_USER:$TARGET_USER" "$USER_BIN_DIR/wallpaper-cycler.sh"
 
-# --- 11. Final Cleanup ---
+# --- 11. Ensure Niri Config Launch ---
+CONFIG_KDL="$TARGET_USER_HOME/.config/niri/config.kdl"
+if [ -f "$CONFIG_KDL" ]; then
+  if ! grep -q "wallpaper-cycler.sh" "$CONFIG_KDL"; then
+    echo "Adding wallpaper-cycler autostart to Niri config..."
+    echo 'spawn-sh-at-startup "~/.local/bin/wallpaper-cycler.sh"' >>"$CONFIG_KDL"
+  fi
+else
+  echo "⚠️  Niri config not found at $CONFIG_KDL; skipping auto-start insertion."
+fi
+
+# --- 12. Final Cleanup ---
 echo "Cleaning up build directory..."
 rm -rf "$BUILD_DIR"
 
