@@ -1,42 +1,36 @@
 #!/usr/bin/env bash
+# music-progress.sh
 # =============================================================================
-# music-progress.sh — Displays playback progress bar and time
-#
-# 🎵 Compatible with playerctl (MPRIS)
-# 🧠 Credits:
-#   - Original EnviiLock by Kaushallrai
-#   - Adapted for 'void-shoizf' — portable and cleaner output
+# Playback progress bar for hyprlock
+# Adapted from Kaushallrai's work: https://github.com/Kaushallrai/hyprlock.git
 # =============================================================================
 
 set -euo pipefail
 
-player=$(playerctl -l 2>/dev/null | head -n 1)
-
+player=$(playerctl -l 2>/dev/null | head -n1 || true)
 if [[ -z "$player" ]]; then
-  echo "[ -------------------- ] 00:00 / 00:00"
+  echo ""
   exit 0
 fi
 
 status=$(playerctl -p "$player" status 2>/dev/null || echo "Stopped")
-
 if [[ "$status" != "Playing" ]]; then
-  echo "[ -------------------- ] Paused"
+  echo ""
   exit 0
 fi
 
-pos=$(playerctl -p "$player" position 2>/dev/null | cut -d '.' -f1)
-length=$(playerctl -p "$player" metadata mpris:length 2>/dev/null | cut -d '.' -f1)
+pos=$(playerctl -p "$player" position 2>/dev/null | cut -d'.' -f1 || echo 0)
+length=$(playerctl -p "$player" metadata mpris:length 2>/dev/null | cut -d'.' -f1 || echo 0)
 length=$((length / 1000000))
 
-if [[ -z "$pos" || -z "$length" || "$length" -eq 0 ]]; then
-  echo "[ -------------------- ] --:--"
+if [[ "$length" -eq 0 ]]; then
+  echo ""
   exit 0
 fi
 
 bar_length=20
 progress=$((pos * bar_length / length))
 bar=""
-
 for ((i = 0; i < bar_length; i++)); do
   if ((i < progress)); then
     bar+="▓"
@@ -45,14 +39,6 @@ for ((i = 0; i < bar_length; i++)); do
   fi
 done
 
-format_time() {
-  local total=$1
-  local m=$((total / 60))
-  local s=$((total % 60))
-  printf "%02d:%02d" "$m" "$s"
-}
+format_time() { printf "%02d:%02d" "$(($1 / 60))" "$(($1 % 60))"; }
 
-pos_fmt=$(format_time "$pos")
-len_fmt=$(format_time "$length")
-
-echo "[ $bar ] $pos_fmt / $len_fmt"
+echo "[ $bar ] $(format_time "$pos") / $(format_time "$length")"

@@ -139,6 +139,9 @@ INSTALLERS=(
   networkman
 )
 
+# Flag for child installers to detect parent
+export PARENT_INSTALLER=1
+
 for script in "${INSTALLERS[@]}"; do
   echo "⚙️ Running installer: $script.sh ..."
   if [[ ! -f "./installers/$script.sh" ]]; then
@@ -149,13 +152,15 @@ for script in "${INSTALLERS[@]}"; do
   chmod +x "./installers/$script.sh"
 
   if [[ "$script" =~ install-packages|grub|networkman ]]; then
-    sudo "./installers/$script.sh"
+    sudo PARENT_INSTALLER=1 "./installers/$script.sh"
   else
-    "./installers/$script.sh" "$TARGET_USER" "$TARGET_USER_HOME"
+    PARENT_INSTALLER=1 "./installers/$script.sh" "$TARGET_USER" "$TARGET_USER_HOME"
   fi
 
   echo "✅ $script.sh completed successfully!"
 done
+
+unset PARENT_INSTALLER
 
 ###############################################################################
 # 6. Enable System Services
