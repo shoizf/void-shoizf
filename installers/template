@@ -1,8 +1,35 @@
 #!/usr/bin/env bash
-# installers/template
+# installers/template — child installer template
+# Use this as starting point for each installer in installers/ directory
 
+set -euo pipefail
+
+# Logging helper
+LOG_DIR="$HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*" | tee -a "$LOG_FILE" >>"$MASTER_LOG"; }
+
+log "▶ template starting"
+
+# Detect VM if util exists
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$REPO_ROOT"
+if [ -f "$SCRIPT_DIR/../utils/is_vm.sh" ]; then
+  source "$SCRIPT_DIR/../utils/is_vm.sh" || true
+else
+  IS_VM=false
+fi
+log "INFO IS_VM=${IS_VM}"
 
-# Your template logic here...
+# Example: skip heavy hardware steps when running in VM
+if [[ "$IS_VM" == true ]]; then
+  log "INFO Running in VM — skipping hardware-only steps"
+else
+  log "INFO Running on bare-metal — performing full steps"
+fi
+
+log "✅ template finished"

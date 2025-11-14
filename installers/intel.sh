@@ -1,11 +1,30 @@
 #!/usr/bin/env bash
-# installers/intel.sh
+# installers/intel.sh — install Intel GPU drivers & helpers
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$REPO_ROOT"
+set -euo pipefail
 
-echo "Installing Intel GPU and Xorg packages..."
-sudo xbps-install -Sy mesa-dri mesa-dri-32bit mesa-demos xf86-video-intel
+LOG_DIR="$HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
 
-echo "Intel GPU setup complete."
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
+}
+
+log "▶ intel.sh starting"
+
+if [ "$EUID" -eq 0 ]; then
+  log "INFO installing Intel packages (running as root)"
+else
+  log "ERROR intel.sh must be run with sudo/root"
+  exit 1
+fi
+
+PACKAGES=(mesa-dri mesa-dri-32bit mesa-demos xf86-video-intel)
+xbps-install -Sy --yes "${PACKAGES[@]}" || log "WARN Some intel packages failed"
+
+log "✅ intel.sh finished"

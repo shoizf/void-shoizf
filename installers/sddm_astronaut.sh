@@ -1,36 +1,50 @@
 #!/usr/bin/env bash
-# installers/sddm_astronaut.sh
+# installers/sddm_astronaut.sh — install SDDM astronaut theme and enable sddm
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+set -euo pipefail
 
-TARGET_USER=${1:-$(logname || whoami)}
-TARGET_USER_HOME=${2:-$(getent passwd "$TARGET_USER" | cut -d: -f6)}
+LOG_DIR="$HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
 
-echo "Installing SDDM Astronaut theme..."
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
+}
 
-sudo xbps-install -Sy sddm qt6-svg qt6-virtualkeyboard qt6-multimedia
+log "▶ sddm_astronaut.sh starting"
 
-if [ -d /usr/share/sddm/themes/sddm-astronaut-theme ]; then
-	echo "Theme directory exists, skipping clone."
+if [ "$EUID" -ne 0 ]; then
+  log "ERROR sddm_astronaut.sh must be run as root"
+  exit 1
+fi
+
+xbps-install -Sy --yes sddm qt6-svg qt6-virtualkeyboard qt6-multimedia || log "WARN SDDM packages may have issues"
+
+THEME_DIR="/usr/share/sddm/themes/sddm-astronaut-theme"
+if [ -d "$THEME_DIR" ]; then
+  log "INFO Theme dir exists — skipping clone"
 else
-	sudo git clone -b master --depth 1 https://github.com/Keyitdev/sddm-astronaut-theme.git /usr/share/sddm/themes/sddm-astronaut-theme
+  git clone -b master --depth 1 https://github.com/Keyitdev/sddm-astronaut-theme.git "$THEME_DIR" || log "WARN theme clone failed"
 fi
 
-sudo cp -r /usr/share/sddm/themes/sddm-astronaut-theme/Fonts/* /usr/share/fonts/
+cp -r "$THEME_DIR/Fonts/"* /usr/share/fonts/ || true
 
-echo "[Theme]
-Current=sddm-astronaut-theme" | sudo tee /etc/sddm.conf
+cat >/etc/sddm.conf <<EOF
+[Theme]
+Current=sddm-astronaut-theme
+EOF
 
-sudo mkdir -p /etc/sddm.conf.d/
-echo "[General]
-InputMethod=qtvirtualkeyboard" | sudo tee /etc/sddm.conf.d/virtualkbd.conf
+mkdir -p /etc/sddm.conf.d
+cat >/etc/sddm.conf.d/virtualkbd.conf <<EOF
+[General]
+InputMethod=qtvirtualkeyboard
+EOF
 
-sudo sed -i 's|^ConfigFile=.*|ConfigFile=Themes/jake_the_dog.conf|' /usr/share/sddm/themes/sddm-astronaut-theme/metadata.desktop
+ln -sf /etc/sv/sddm /var/service/sddm || true
+sv down sddm || true
 
-if [ ! -L /var/service/sddm ]; then
-	sudo ln -s /etc/sv/sddm /var/service/sddm
-	sudo sv down sddm
-fi
-
-echo "SDDM Astronaut theme installed."
+log "✅ sddm_astronaut.sh finished"

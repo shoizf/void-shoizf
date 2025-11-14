@@ -1,118 +1,73 @@
 #!/usr/bin/env bash
-# installers/awww.sh
-# Final robust version for clean install of 'awww' and wallpaper cycler
+# installers/awww.sh — build & install awww and wallpaper-cycler
 
-set -euo pipefail # Stop on any error
+set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LOG_DIR="$HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
 
-TARGET_USER=${1:-$(logname || whoami)}
-TARGET_USER_HOME=${2:-$(getent passwd "$TARGET_USER" | cut -d: -f6)}
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
+}
 
-# --- Safety Check ---
-if [ "$(whoami)" != "$TARGET_USER" ]; then
-  echo "❌ [awww.sh] This script must be run as the target user ($TARGET_USER), not as $(whoami)."
+log "▶ awww.sh starting"
+
+if [ "$EUID" -eq 0 ]; then
+  log "ERROR Do not run awww.sh as root. Exiting."
   exit 1
 fi
 
-echo "--- [AWWW Installer] ---"
-echo "Configuring for user: $TARGET_USER ($TARGET_USER_HOME)"
-
-# --- 1. Install Build Dependencies ---
-echo "Installing build dependencies (gcc, git, pkg-config, etc)..."
-sudo xbps-install -Sy -y \
-  gcc \
-  git \
-  pkg-config \
-  liblz4-devel \
-  wayland-devel \
-  wayland-protocols \
-  scdoc \
-  jq \
-  wget || echo "⚠️  Some dependencies may already be installed."
-
-# --- 2. Protect Build Tools ---
-echo "Protecting build tools from removal..."
-sudo xbps-pkgdb -m manual gcc pkg-config
-
-# --- 3. Remove Conflicting System Rust ---
-echo "Removing system 'rust' package (if present) to install rustup..."
-sudo xbps-remove -RF -y rust || true
-
-# --- 4. Install Rustup (as the user) ---
-if ! command -v rustup >/dev/null 2>&1; then
-  echo "Rustup not found. Installing rustup..."
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-fi
-
-# --- 5. Set the PATH for this script session ---
-echo "Manually adding Cargo to PATH for this session..."
-export PATH="$TARGET_USER_HOME/.cargo/bin:$PATH"
-
-# --- 6. Validate Rustc ---
-if ! command -v rustc >/dev/null 2>&1; then
-  echo "❌ [awww.sh] rustc command not found even after PATH export."
-  exit 1
-fi
-RUST_VERSION=$(rustc --version)
-echo "Using Rust: $RUST_VERSION"
-
-# --- 7. Clone/Update the 'awww' Repo ---
-BUILD_DIR="$TARGET_USER_HOME/builds"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="$HOME/builds"
 AWWW_DIR="$BUILD_DIR/awww"
 mkdir -p "$BUILD_DIR"
 
+DEPS=(gcc git pkg-config liblz4-devel wayland-devel wayland-protocols scdoc jq wget curl)
+log "INFO Installing build deps: ${DEPS[*]}"
+sudo xbps-install -Sy --yes "${DEPS[@]}" || log "WARN Some build deps may have failed"
+
+# rustup / cargo
+if ! command -v cargo >/dev/null 2>&1; then
+  log "INFO Installing rustup for user"
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  export PATH="$HOME/.cargo/bin:$PATH"
+fi
+log "INFO Using cargo at $(command -v cargo || echo 'not found')"
+
+# Clone or update
 if [ -d "$AWWW_DIR" ]; then
-  echo "Updating existing 'awww' repo..."
-  if ! git -C "$AWWW_DIR" pull; then
-    echo "Git pull failed. Removing and re-cloning."
-    rm -rf "$AWWW_DIR"
-    git clone https://codeberg.org/LGFae/awww.git "$AWWW_DIR"
-  fi
+  log "INFO Updating existing awww repo"
+  git -C "$AWWW_DIR" pull || log "WARN Failed to git pull awww"
 else
-  echo "Cloning 'awww' repo..."
-  git clone https://codeberg.org/LGFae/awww.git "$AWWW_DIR"
+  log "INFO Cloning awww repo"
+  git clone https://codeberg.org/LGFae/awww.git "$AWWW_DIR" || log "WARN git clone failed"
 fi
 
-# --- 8. Build 'awww' (Robustly) ---
-echo "Building 'awww' in release mode..."
-cd "$AWWW_DIR"
+cd "$AWWW_DIR" || {
+  log "ERROR awww dir missing"
+  exit 1
+}
+log "INFO Building awww (release)"
 if ! cargo build --release; then
-  echo "❌ [awww.sh] Cargo build FAILED!"
-  cd "$REPO_ROOT"
+  log "ERROR Cargo build failed"
   exit 1
 fi
-cd "$REPO_ROOT"
-echo "✅ Build successful."
 
-# --- 9. Install Binaries (as root) ---
-echo "Installing 'awww' and 'awww-daemon' binaries to /usr/bin/..."
-sudo cp "$AWWW_DIR/target/release/awww" /usr/bin/awww
-sudo cp "$AWWW_DIR/target/release/awww-daemon" /usr/bin/awww-daemon
-sudo chmod 755 /usr/bin/awww /usr/bin/awww-daemon
+# Install binaries (requires sudo)
+log "INFO Installing awww binaries to /usr/bin"
+sudo cp -f target/release/awww /usr/bin/awww || log "WARN Failed to copy awww"
+sudo cp -f target/release/awww-daemon /usr/bin/awww-daemon || log "WARN Failed to copy awww-daemon"
 
-# --- 10. Install User Scripts ---
-echo "Installing wallpaper cycler script..."
-USER_BIN_DIR="$TARGET_USER_HOME/.local/bin"
-mkdir -p "$USER_BIN_DIR"
-cp "$REPO_ROOT/bin/wallpaper-cycler.sh" "$USER_BIN_DIR/wallpaper-cycler.sh"
-chmod +x "$USER_BIN_DIR/wallpaper-cycler.sh"
-sudo chown "$TARGET_USER:$TARGET_USER" "$USER_BIN_DIR/wallpaper-cycler.sh"
+# Install wallpaper-cycler script to user bin
+mkdir -p "$HOME/.local/bin"
+cp -f "$REPO_ROOT/bin/wallpaper-cycler.sh" "$HOME/.local/bin/wallpaper-cycler.sh"
+chmod +x "$HOME/.local/bin/wallpaper-cycler.sh"
+log "OK Wallpaper cycler installed to $HOME/.local/bin"
 
-# --- 11. Ensure Niri Config Launch ---
-CONFIG_KDL="$TARGET_USER_HOME/.config/niri/config.kdl"
-if [ -f "$CONFIG_KDL" ]; then
-  if ! grep -q "wallpaper-cycler.sh" "$CONFIG_KDL"; then
-    echo "Adding wallpaper-cycler autostart to Niri config..."
-    echo 'spawn-sh-at-startup "~/.local/bin/wallpaper-cycler.sh"' >>"$CONFIG_KDL"
-  fi
-else
-  echo "⚠️  Niri config not found at $CONFIG_KDL; skipping auto-start insertion."
-fi
-
-# --- 12. Final Cleanup ---
-echo "Cleaning up build directory..."
 rm -rf "$BUILD_DIR"
-
-echo "✅ 'awww' and wallpaper cycler script installed successfully."
+log "✅ awww.sh finished"

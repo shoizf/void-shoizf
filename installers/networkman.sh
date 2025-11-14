@@ -1,51 +1,74 @@
 #!/usr/bin/env bash
-# installers/networkman.sh — NetworkManager setup for Void Linux
-# Author: shoizf
-# Description: Configures NetworkManager for both hardware and VM (NAT) environments.
+# installers/networkman.sh — install & configure NetworkManager for Void
+# This script is VM-aware: on VMs we will not replace running wpa_supplicant service
 
-set -e
+set -euo pipefail
+
+LOG_DIR="$HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
+
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
+}
+
+log "▶ networkman.sh starting"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$REPO_ROOT"
-
-echo "🌐 Installing NetworkManager packages..."
-sudo xbps-install -Sy NetworkManager networkmanager-dmenu nm-tray
-
-# Detect if running in a virtualized environment
-if systemd-detect-virt >/dev/null 2>&1; then
-  echo "💡 Virtual machine detected — configuring minimal Ethernet/NAT setup."
+if [ -f "$SCRIPT_DIR/../utils/is_vm.sh" ]; then
+  source "$SCRIPT_DIR/../utils/is_vm.sh" || true
 else
-  echo "🛰️ Real hardware detected — enabling full NetworkManager features."
+  IS_VM=false
+fi
+log "INFO IS_VM=${IS_VM}"
+
+if [ "$EUID" -ne 0 ]; then
+  log "ERROR networkman.sh must be run as root. Exiting."
+  exit 1
 fi
 
-# Configure DHCP to use internal plugin (safe for NAT and Wi-Fi)
+log "INFO Installing NetworkManager packages"
+xbps-install -Sy --yes NetworkManager networkmanager-dmenu nm-tray || log "WARN NM packages may have failed"
+
+# Detect virtualization (informational only)
+if systemd-detect-virt >/dev/null 2>&1; then
+  log "INFO VM detected — configuring minimal Ethernet/NAT setup"
+else
+  log "INFO Bare-metal hardware detected — configuring full NetworkManager setup"
+fi
+
+# Configure internal DHCP for NM
 CONF_DIR="/etc/NetworkManager/conf.d"
 CONF_FILE="$CONF_DIR/90-internal-dhcp.conf"
-sudo mkdir -p "$CONF_DIR"
-
-cat <<EOF | sudo tee "$CONF_FILE" >/dev/null
+mkdir -p "$CONF_DIR"
+cat >"$CONF_FILE" <<EOF
 [main]
 dhcp=internal
 EOF
 
-# Remove conflicting services if active
-for svc in dhcpcd wpa_supplicant; do
-  if [ -L "/var/service/$svc" ]; then
-    echo "⚙️  Removing conflicting service link: $svc"
-    sudo rm "/var/service/$svc"
+# Handle runit services
+if [[ "$IS_VM" == true ]]; then
+  log "INFO VM detected — will NOT remove wpa_supplicant or dhcpcd"
+else
+  if [ -L /var/service/dhcpcd ]; then
+    rm -f /var/service/dhcpcd || true
+    log "OK removed dhcpcd runit link"
   fi
-done
-
-# Backup resolv.conf safely (only once)
-if [ -f /etc/resolv.conf ] && [ ! -f /etc/resolv.conf.old ]; then
-  sudo mv /etc/resolv.conf /etc/resolv.conf.old
+  if [ -L /var/service/wpa_supplicant ]; then
+    rm -f /var/service/wpa_supplicant || true
+    log "OK removed wpa_supplicant runit link"
+  fi
+  if [ -f /etc/resolv.conf ]; then
+    mv /etc/resolv.conf /etc/resolv.conf.old || true
+    log "OK backed up resolv.conf"
+  fi
 fi
 
-# Enable NetworkManager (runit)
-if [ ! -L /var/service/NetworkManager ]; then
-  echo "🔌 Enabling NetworkManager service..."
-  sudo ln -s /etc/sv/NetworkManager /var/service
-fi
+log "INFO Enabling NetworkManager service"
+ln -sf /etc/sv/NetworkManager /var/service || true
 
-echo "✅ NetworkManager configured successfully."
+log "✅ networkman.sh finished"
