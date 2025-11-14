@@ -1,194 +1,106 @@
 #!/usr/bin/env bash
-###############################################################################
-# install.sh — Main installer for void-shoizf
-# Author: shoizf
-#
-# Safe, idempotent installation script for Void Linux customization.
-# Handles sudo configuration, installer submodules, and clean restoration.
-# Run as a normal user (not root).
-###############################################################################
+# install.sh — Main installer for void-shoizf (VM-aware)
+# Run as a normal user (not root). Calls root-required installers with sudo.
 
 set -euo pipefail
 
-###############################################################################
-# 0. Initialization
-###############################################################################
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# --- Safety check ---
+if [ "$EUID" -eq 0 ]; then
+  echo "❌ This script should NOT be run as root."
+  exit 1
+fi
 
+# --- Paths ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+UTILS_DIR="$SCRIPT_DIR/utils"
+INSTALLERS_DIR="$SCRIPT_DIR/installers"
 LOG_DIR="$HOME/.local/log/void-shoizf"
 mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/install_$(date '+%Y%m%d_%H%M%S').log"
 
-if ! touch "$LOG_FILE" 2>/dev/null; then
-  echo "❌ Cannot create log file at $LOG_FILE"
-  exit 1
-fi
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
 
-set +o pipefail
-exec > >(tee -a "$LOG_FILE") 2>&1
-set -o pipefail
-
-echo "📜 Logging to: $LOG_FILE"
-echo "------------------------------------------------------------"
-echo "Started at: $(date)"
-echo "User: $(whoami)"
-echo "Working directory: $(pwd)"
-echo "------------------------------------------------------------"
-
-PS4='+ [$(date "+%H:%M:%S")] '
-set -x
-
-###############################################################################
-# 1. Sanity Checks
-###############################################################################
-if [[ "$(id -u)" -eq 0 ]]; then
-  echo "❌ Do NOT run this as root."
-  exit 1
-fi
-
-TARGET_USER=$(whoami)
-TARGET_USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
-if [[ -z "$TARGET_USER" || -z "$TARGET_USER_HOME" ]]; then
-  echo "❌ Could not determine target user or home directory."
-  exit 1
-fi
-
-echo "Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
-
-###############################################################################
-# 2. Temporary NOPASSWD sudo setup (self-healing)
-###############################################################################
-USER_NAME="$TARGET_USER"
-SUDOERS_D_FRAGMENT="/etc/sudoers.d/99-shoizf-temp"
-
-echo "🧩 Checking for leftover sudo configuration..."
-if sudo test -f "$SUDOERS_D_FRAGMENT"; then
-  echo "⚠️ Found leftover sudoers fragment. Removing..."
-  sudo rm -f "$SUDOERS_D_FRAGMENT"
-  echo "✅ Removed old fragment."
-fi
-
-OLD_BACKUPS=$(sudo find /etc -maxdepth 1 -type f -name "sudoers.shoizf.backup.*" -print -delete 2>/dev/null || true)
-if [[ -n "$OLD_BACKUPS" ]]; then
-  echo "🧾 Removed stale sudoers backups:"
-  echo "$OLD_BACKUPS"
-fi
-
-sudo visudo -c >/dev/null 2>&1 && echo "✅ Sudoers syntax clean before modification."
-
-_cleanup_sudoers_fragment() {
-  rc=$?
-  echo "♻️ Cleaning sudoers temp fragment (exit: $rc)..."
-  sudo rm -f "$SUDOERS_D_FRAGMENT" 2>/dev/null || true
-  sudo visudo -c >/dev/null 2>&1 && echo "✅ Verified sudoers syntax post-cleanup."
-  return $rc
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
 }
-trap _cleanup_sudoers_fragment EXIT
 
-echo "$USER_NAME ALL=(ALL) NOPASSWD:ALL" | sudo tee "$SUDOERS_D_FRAGMENT" >/dev/null
-sudo chmod 0440 "$SUDOERS_D_FRAGMENT"
-sudo visudo -c >/dev/null 2>&1 && echo "✅ Temporary sudo access granted."
+log "▶ Starting install.sh"
 
-###############################################################################
-# 3. Udev Rules for Backlight
-###############################################################################
-UDEV_RULES_DIR="/etc/udev/rules.d"
-sudo mkdir -p "$UDEV_RULES_DIR"
-UDEV_RULES_FILE="$UDEV_RULES_DIR/90-backlight.rules"
+# --- Source VM detection utility (repo-friendly detection) ---
+if [ -f "$UTILS_DIR/is_vm.sh" ]; then
+  # is_vm.sh prints true/false and sets IS_VM variable
+  source "$UTILS_DIR/is_vm.sh"
+  : "${IS_VM:=false}"
+  log "INFO VM detection: IS_VM=${IS_VM}"
+else
+  IS_VM=false
+  log "WARN utils/is_vm.sh not found; assuming IS_VM=false"
+fi
 
-cat <<'EOF' | sudo tee "$UDEV_RULES_FILE" >/dev/null
-ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness"
-ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
-EOF
+# --- Determine TARGET_USER and HOME if not provided ---
+TARGET_USER=${TARGET_USER:-$(whoami)}
+TARGET_USER_HOME=${TARGET_USER_HOME:-$(getent passwd "$TARGET_USER" | cut -d: -f6)}
+if [ -z "$TARGET_USER_HOME" ]; then
+  log "ERROR Could not determine TARGET_USER_HOME for $TARGET_USER"
+  exit 1
+fi
+log "INFO Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
 
-sudo udevadm control --reload
-sudo udevadm trigger
-echo "✅ Udev rules for backlight applied."
-
-###############################################################################
-# 4. Add User to Groups
-###############################################################################
-GROUPS_TO_ADD="video lp input"
-for group in $GROUPS_TO_ADD; do
-  if id -nG "$TARGET_USER" | grep -qw "$group"; then
-    echo "User $TARGET_USER already in group: $group."
-  else
-    sudo usermod -a -G "$group" "$TARGET_USER"
-    echo "Added user $TARGET_USER to group: $group."
-  fi
-done
-
-###############################################################################
-# 5. Run Installer Submodules
-###############################################################################
+# --- Ordered installer list (adjust order as required) ---
 INSTALLERS=(
-  install-packages
-  add-font
-  audio-integration
-  niri
-  waybar
-  hyprlock
-  sddm_astronaut
-  awww
-  grub
-  nvidia
-  vulkan-intel
-  intel
-  dev-tools
-  networkman
+  "install-packages" # requires sudo
+  "add-font"
+  "audio-integration"
+  "awww"
+  "dev-tools"
+  "niri"
+  "waybar"
+  "hyprlock"
+  "sddm_astronaut"
+  "intel"
+  "vulkan-intel"
+  "nvidia"
+  "networkman"
+  "grub"
 )
 
-# Flag for child installers to detect parent
-export PARENT_INSTALLER=1
+# --- Run installers ---
+for installer in "${INSTALLERS[@]}"; do
+  SCRIPT_PATH="$INSTALLERS_DIR/${installer}.sh"
 
-for script in "${INSTALLERS[@]}"; do
-  echo "⚙️ Running installer: $script.sh ..."
-  if [[ ! -f "./installers/$script.sh" ]]; then
-    echo "⚠️ Missing installer script: $script.sh — skipping."
+  if [ ! -f "$SCRIPT_PATH" ]; then
+    log "WARN Missing installer: $SCRIPT_PATH — skipping."
     continue
   fi
 
-  chmod +x "./installers/$script.sh"
-
-  if [[ "$script" =~ install-packages|grub|networkman ]]; then
-    sudo PARENT_INSTALLER=1 "./installers/$script.sh"
-  else
-    PARENT_INSTALLER=1 "./installers/$script.sh" "$TARGET_USER" "$TARGET_USER_HOME"
+  # Skip certain hardware installers on VMs
+  if [[ "$IS_VM" == true && "$installer" =~ ^(intel|nvidia|networkman)$ ]]; then
+    log "SKIP ${installer}.sh — skipped for VM environment."
+    continue
   fi
 
-  echo "✅ $script.sh completed successfully!"
+  log "▶ Running ${installer}.sh"
+
+  # Decide whether to run with sudo (install-packages requires root)
+  if [[ "$installer" == "install-packages" ]]; then
+    # must be run as root — we call with sudo
+    if sudo bash "$SCRIPT_PATH"; then
+      log "OK ${installer}.sh completed (sudo)"
+    else
+      log "ERROR ${installer}.sh (sudo) failed — continuing"
+    fi
+  else
+    # run as user; pass TARGET_USER and TARGET_USER_HOME for scripts that accept them
+    if bash "$SCRIPT_PATH" "$TARGET_USER" "$TARGET_USER_HOME"; then
+      log "OK ${installer}.sh completed"
+    else
+      log "ERROR ${installer}.sh failed — continuing"
+    fi
+  fi
+
 done
 
-unset PARENT_INSTALLER
-
-###############################################################################
-# 6. Enable System Services
-###############################################################################
-SERVICE_DIR="/var/service"
-enable_service() {
-  local name="$1"
-  local src="/etc/sv/$name"
-  local dest="$SERVICE_DIR/$name"
-  if [[ -d "$src" || -L "$src" ]]; then
-    [[ -L "$dest" ]] || sudo ln -sf "$src" "$dest"
-    echo "✅ Enabled $name service."
-  else
-    echo "⚠️ Service $name not found at $src."
-  fi
-}
-
-enable_service power-profiles-daemon
-enable_service NetworkManager
-enable_service dbus
-
-###############################################################################
-# 7. Wrap-up
-###############################################################################
-set +x
-echo
-echo "🎉 Installation complete!"
-echo "Log saved at: $LOG_FILE"
-echo "Reboot recommended."
-echo "------------------------------------------------------------"
-echo "Ended at: $(date)"
+log "✅ install.sh finished"
