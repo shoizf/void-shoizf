@@ -17,17 +17,22 @@ INSTALLERS_DIR="$SCRIPT_DIR/installers"
 LOG_DIR="$HOME/.local/log/void-shoizf"
 mkdir -p "$LOG_DIR"
 
+# --- Master Log Setup ---
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
-SCRIPT_NAME="$(basename "$0" .sh)"
-LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
-MASTER_LOG="$LOG_DIR/master-install.log"
+SCRIPT_NAME="void-shoizf" # Master name for the combined log
+MASTER_LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+
+# EXPORT the master log path for all child scripts
+export VOID_SHOIZF_MASTER_LOG="$MASTER_LOG_FILE"
 
 log() {
-  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
+  # Use the script's own name for its log entries
+  local script_basename="$(basename "$0" .sh)"
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$script_basename] $*"
+  echo "$msg" | tee -a "$MASTER_LOG_FILE"
 }
 
-log "▶ Starting install.sh"
+log "▶ Starting install.sh (Master Log: $MASTER_LOG_FILE)"
 
 # --- Source VM detection utility (repo-friendly detection) ---
 if [ -f "$UTILS_DIR/is_vm.sh" ]; then
@@ -68,7 +73,6 @@ INSTALLERS=(
 )
 
 # --- List of all scripts that must be run as root ---
-# (Moved outside the loop per review suggestion)
 ROOT_INSTALLERS=(
   "install-packages"
   "grub"
@@ -107,20 +111,18 @@ for installer in "${INSTALLERS[@]}"; do
 
   # Decide whether to run with sudo
   if [[ "$is_root_script" == true ]]; then
-    # must be run as root
-    if sudo bash "$SCRIPT_PATH"; then
+    # must be run as root. Use -E to pass the VOID_SHOIZF_MASTER_LOG env var.
+    if sudo -E bash "$SCRIPT_PATH"; then
       log "OK ${installer}.sh completed (sudo)"
     else
-      # (Added exit code logging per review suggestion)
       rc=$?
       log "ERROR ${installer}.sh (sudo) failed with exit $rc — continuing"
     fi
   else
-    # run as user; pass TARGET_USER and TARGET_USER_HOME for scripts that accept them
+    # run as user; env var is inherited automatically
     if bash "$SCRIPT_PATH" "$TARGET_USER" "$TARGET_USER_HOME"; then
       log "OK ${installer}.sh completed"
     else
-      # (Added exit code logging per review suggestion)
       rc=$?
       log "ERROR ${installer}.sh failed with exit $rc — continuing"
     fi

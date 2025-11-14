@@ -3,14 +3,32 @@
 
 set -euo pipefail
 
-LOG_DIR="$HOME/.local/log/void-shoizf"
-mkdir -p "$LOG_DIR"
-TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
-SCRIPT_NAME="$(basename "$0" .sh)"
-LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
-MASTER_LOG="$LOG_DIR/master-install.log"
+# --- Logging setup ---
+# Find the user's home dir for logging, even when run as root
+if [ -n "$SUDO_USER" ]; then
+  USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+else
+  USER_HOME="$HOME"
+fi
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*" | tee -a "$LOG_FILE" >>"$MASTER_LOG"; }
+LOG_DIR="$USER_HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+SCRIPT_NAME="$(basename "$0" .sh)"
+
+# Check if we're being run by the master installer
+if [ -n "$VOID_SHOIZF_MASTER_LOG" ]; then
+  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+else
+  # We are being run directly, create our own log
+  TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+fi
+
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" | tee -a "$LOG_FILE"
+}
+# --- End Logging setup ---
 
 log "▶ vulkan-intel.sh starting"
 
@@ -29,10 +47,9 @@ fi
 
 xbps-install -Sy --yes mesa-vulkan-intel mesa-vulkan-intel-32bit vulkan-loader vulkan-loader-32bit vulkan-headers vulkan-validationlayers mesa-vulkan-lavapipe || log "WARN Vulkan packages may have issues"
 
-# (Logic improved per review suggestion)
+# Now, write to the correct user's home
 target_profile="$TARGET_USER_HOME/.bash_profile"
 
-# Now, write to the correct user's home
 if ! grep -q 'VK_ICD_FILENAMES' "$target_profile" 2>/dev/null; then
   log "INFO Adding VK_ICD_FILENAMES to $target_profile"
   echo 'export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/intel_icd.x86_64.json' >>"$target_profile"
