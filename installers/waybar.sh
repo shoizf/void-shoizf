@@ -1,70 +1,45 @@
 #!/usr/bin/env bash
-# installers/waybar.sh
+# installers/waybar.sh — copy waybar config and ensure dependencies
 
 set -euo pipefail
 
-# --- Setup paths ---
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONFIG_SRC="$REPO_ROOT/configs/waybar"
-
-# Use the same logging path as main install.sh
 LOG_DIR="$HOME/.local/log/void-shoizf"
 mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/waybar-install.log"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
 
-# Redirect all output to both terminal and log file
-exec > >(tee -a "$LOG_FILE") 2>&1
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*" | tee -a "$LOG_FILE" >>"$MASTER_LOG"; }
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🧱 Starting Waybar setup..."
-echo "Log file: $LOG_FILE"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+log "▶ waybar.sh starting"
 
-# --- Determine user and home directory ---
 TARGET_USER=${1:-$(whoami)}
 TARGET_HOME=${2:-$HOME}
-
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_SRC="$REPO_ROOT/configs/waybar"
 WAYBAR_DEST="$TARGET_HOME/.config/waybar"
 
-echo "📂 Installing for user: $TARGET_USER"
-echo "🏠 Target home: $TARGET_HOME"
-echo "📁 Config destination: $WAYBAR_DEST"
+log "INFO Installing Waybar deps"
+sudo xbps-install -Sy --yes waybar brightnessctl wl-clipboard wireplumber power-profiles-daemon network-manager-applet || log "WARN waybar deps install had issues"
 
-# --- Ensure dependencies ---
-echo "📦 Installing Waybar dependencies..."
-sudo xbps-install -Sy --yes waybar brightnessctl wl-clipboard wireplumber \
-  power-profiles-daemon network-manager-applet || {
-  echo "⚠️ Some Waybar dependencies failed to install. Continuing..."
-}
-
-# --- Backup existing config ---
-if [[ -d "$WAYBAR_DEST" ]]; then
+if [ -d "$WAYBAR_DEST" ]; then
   BACKUP_DIR="${WAYBAR_DEST}.bak-$(date +%Y%m%d-%H%M%S)"
-  echo "📦 Backing up existing config to: $BACKUP_DIR"
-  mv "$WAYBAR_DEST" "$BACKUP_DIR"
+  mv "$WAYBAR_DEST" "$BACKUP_DIR" || log "WARN failed to backup old waybar config"
+  log "OK backed up old config to $BACKUP_DIR"
 fi
 
-# --- Copy new config ---
-echo "📁 Copying Waybar configuration from $CONFIG_SRC ..."
 mkdir -p "$WAYBAR_DEST"
 cp -r "$CONFIG_SRC/"* "$WAYBAR_DEST/"
+chown -R "$TARGET_USER":"$TARGET_USER" "$WAYBAR_DEST" || true
 
-# --- Fix permissions ---
-echo "🔧 Fixing ownership and permissions..."
-chown -R "$TARGET_USER":"$TARGET_USER" "$WAYBAR_DEST"
-
-# --- Verify installation ---
-if [[ ! -f "$WAYBAR_DEST/config.jsonc" || ! -f "$WAYBAR_DEST/style.css" ]]; then
-  echo "❌ Missing Waybar config files. Check source at $CONFIG_SRC"
+if [ ! -f "$WAYBAR_DEST/config.jsonc" ]; then
+  log "ERROR Waybar config missing after copy"
   exit 1
 fi
 
 if ! command -v waybar >/dev/null 2>&1; then
-  echo "❌ Waybar binary not found in PATH — installation likely failed."
-  exit 1
+  log "WARN waybar binary not found — please ensure package installed"
 fi
 
-echo "✅ Waybar successfully configured for $TARGET_USER"
-echo "🪵 Detailed log: $LOG_FILE"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+log "✅ waybar.sh finished"

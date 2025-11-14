@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# installers/audio-integration.sh
+# installers/audio-integration.sh — install PipeWire & audio utilities
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+set -euo pipefail
 
-TARGET_USER=${1:-$(logname || whoami)}
-TARGET_USER_HOME=${2:-$(getent passwd "$TARGET_USER" | cut -d: -f6)}
+LOG_DIR="$HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
 
-echo "Installing Audio components (PipeWire, WirePlumber, Firmware)..."
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
+}
 
-AUDIO_PACKAGES="
-pipewire
-wireplumber
-wireplumber-elogind
-libpipewire
-alsa-pipewire
-libspa-alsa
-alsa-lib
-alsa-utils
-alsa-ucm-conf
-alsa-plugins-pulseaudio
-sof-firmware
-linux-firmware
-linux-firmware-intel
-"
+log "▶ audio-integration.sh starting"
 
-sudo xbps-install -Sy $AUDIO_PACKAGES || echo "⚠️ Audio packages may have issues."
+if [ "$EUID" -eq 0 ]; then
+  log "ERROR Do not run audio-integration.sh as root. Exiting."
+  exit 1
+fi
 
-echo "Configuring ALSA to use PipeWire..."
-sudo mkdir -p /etc/alsa/conf.d
-sudo ln -sf /usr/share/alsa/alsa.conf.d/50-pipewire.conf /etc/alsa/conf.d/
-sudo ln -sf /usr/share/alsa/alsa.conf.d/99-pipewire-default.conf /etc/alsa/conf.d/
+PKGS=(pipewire wireplumber pipewire-pulse alsa-utils pavucontrol libspa-alsa sof-firmware)
+log "INFO Installing audio packages: ${PKGS[*]}"
+sudo xbps-install -Sy --yes "${PKGS[@]}" || log "WARN Some audio packages failed to install"
 
-echo "Audio integration script finished."
-echo "IMPORTANT: A reboot is recommended after installing firmware packages."
+# Link ALSA config for PipeWire (if present)
+if [ -f /usr/share/alsa/alsa.conf.d/50-pipewire.conf ]; then
+  sudo mkdir -p /etc/alsa/conf.d || true
+  sudo ln -sf /usr/share/alsa/alsa.conf.d/50-pipewire.conf /etc/alsa/conf.d/50-pipewire.conf || true
+  log "OK ALSA configured to use PipeWire (symlink created)"
+fi
+
+log "✅ audio-integration.sh finished"

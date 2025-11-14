@@ -1,35 +1,31 @@
 #!/usr/bin/env bash
-# installers/install-packages.sh
-#
-# This script is called by the main install.sh and *must be run as root*
-# (or via sudo) as it installs system-wide packages.
+# installers/install-packages.sh — core system packages (must run as root)
 
 set -euo pipefail
 
-echo "--- [Core Packages Installer] ---"
+if [ "$EUID" -ne 0 ]; then
+  echo "ERROR install-packages.sh must be run as root (via sudo)."
+  exit 1
+fi
 
-# Use the reliable array format
-PACKAGES_ARRAY=(
-  "niri" "xdg-utils" "xdg-desktop-portal-wlr" "wayland"
-  "xwayland-satellite" "polkit-kde-agent" "swaybg"
-  "alacritty" "zsh" "walker" "Waybar" "wob" "mpc" "yazi"
-  "pcmanfm" "pavucontrol" "swayimg" "cargo" "gammastep"
-  "brightnessctl" "xdg-desktop-portal" "xdg-desktop-portal-gtk"
-  "power-profiles-daemon" "firefox" "sddm" "tmux" "ripgrep"
-  "fd" "tree" "xorg-server" "xf86-input-libinput" "dbus-libs"
-  "dbus-x11" "cups" "cups-filters" "acpi" "jq" "dateutils"
-  "wlr-randr" "procps-ng" "playerctl" "lsd" "unzip"
-  "flatpak" "elogind" "nodejs" "mako" "wget" "scdoc"
-  "liblz4-devel" "dolphin" "qalculate-qt" "curl" "git"
-  "desktop-file-utils" "gtk+3" "lm_sensors" "neovim"
+LOG_DIR="$HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
+
+echo "[${SCRIPT_NAME}] Starting package install" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
+
+PACKAGES=(
+  niri xdg-utils xdg-desktop-portal-wlr wayland
+  xwayland-satellite polkit-kde-agent swaybg alacritty zsh walker waybar wob mpc yazi
+  pcmanfm pavucontrol swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
+  power-profiles-daemon firefox sddm tmux ripgrep fd tree dbus-libs dbus-x11 cups cups-filters acpi jq dateutils
+  wlr-randr procps-ng playerctl lsd unzip flatpak elogind nodejs mako wget scdoc liblz4-devel dolphin qalculate-qt curl git desktop-file-utils gtk+3 lm_sensors neovim
 )
 
-echo "📦 Installing core packages..."
-echo "DEBUG: Package list to install:"
-printf "[%s]\n" "${PACKAGES_ARRAY[@]}"
+echo "Installing ${#PACKAGES[@]} packages..."
+xbps-install -Sy --yes "${PACKAGES[@]}"
 
-# 'sudo' is omitted here because the parent install.sh
-# is responsible for calling this script with sudo.
-xbps-install -Sy "${PACKAGES_ARRAY[@]}"
-
-echo "✅ Core packages installed successfully!"
+echo "Package install completed" | tee -a "$LOG_FILE" >>"$MASTER_LOG"

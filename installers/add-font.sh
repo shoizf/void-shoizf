@@ -1,88 +1,49 @@
 #!/usr/bin/env bash
-# =============================================================================
-# add-font.sh — Installs Hyprlock + Developer fonts locally for the current user
-# Works on: Void Linux
-#
-# 📦 Installs system base fonts (via xbps)
-# 🪶 Copies Hyprlock custom OTF fonts from assets/fonts/** → ~/.local/share/fonts/custom/
-# 🪵 Logs actions to ~/.local/log/void-shoizf/add-font.log
-#
-# 🧠 Credits:
-#   - Original Hyprlock configuration & fonts concept from Kaushal (Envii)
-#     Source: https://github.com/Makrennel/hyprlock
-# =============================================================================
+# installers/add-font.sh — install repo fonts into user's local fonts
 
 set -euo pipefail
 
-# --- Path setup ---
-REPO_DIR="$(dirname "$(realpath "$0")")/.."
-ASSET_DIR="$REPO_DIR/assets/fonts"
+# Logging setup
 LOG_DIR="$HOME/.local/log/void-shoizf"
-FONT_DIR="$HOME/.local/share/fonts"
-CUSTOM_DIR="$FONT_DIR/custom"
+mkdir -p "$LOG_DIR"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="$(basename "$0" .sh)"
+LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+MASTER_LOG="$LOG_DIR/master-install.log"
 
-mkdir -p "$LOG_DIR" "$CUSTOM_DIR"
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" | tee -a "$LOG_FILE" >>"$MASTER_LOG"
+}
 
-LOG_FILE="$LOG_DIR/add-font.log"
+log "▶ add-font.sh starting"
 
-# --- Logging setup ---
-exec > >(tee -a "$LOG_FILE") 2>&1
-timestamp() { date +"[%Y-%m-%d %H:%M:%S]"; }
-
-echo "$(timestamp) 🧾 Logging to: $LOG_FILE"
-echo "$(timestamp) 🔧 Installing developer + Hyprlock fonts for user: $USER"
-echo "$(timestamp) ------------------------------------------------------------"
-
-# --- Step 1: Install system fonts via XBPS ---
-echo "$(timestamp) 📦 Installing base font packages..."
-sudo xbps-install -Sy \
-  font-awesome font-awesome5 font-awesome6 nerd-fonts-symbols-ttf \
-  terminus-font dejavu-fonts-ttf liberation-fonts-ttf \
-  noto-fonts-cjk noto-fonts-emoji font-firacode ||
-  echo "$(timestamp) ⚠️ Some base fonts might already be installed or failed to update."
-
-# --- Step 2: Copy bundled OTF fonts from assets ---
-echo "$(timestamp) 📁 Installing Hyprlock custom fonts from assets directory..."
-
-declare -A FONT_PATHS=(
-  ["Metropolis-Medium.otf"]="$ASSET_DIR/metropolis/Metropolis-Medium.otf"
-  ["SFPRODISPLAYMEDIUM.OTF"]="$ASSET_DIR/sf-pro-display/SFPRODISPLAYMEDIUM.OTF"
-  ["Stange Bold OTF.otf"]="$ASSET_DIR/stange/Stange Bold OTF.otf"
-)
-
-for font in "${!FONT_PATHS[@]}"; do
-  SRC="${FONT_PATHS[$font]}"
-  DEST="$CUSTOM_DIR/$font"
-
-  if [[ -f "$DEST" ]]; then
-    echo "$(timestamp) ♻️ Removing old version of $font..."
-    rm -f "$DEST"
-  fi
-
-  if [[ -f "$SRC" ]]; then
-    echo "$(timestamp) 📦 Installing new version of $font..."
-    cp "$SRC" "$DEST"
-    chmod 644 "$DEST"
-    echo "$(timestamp) ✅ $font successfully updated."
-  else
-    echo "$(timestamp) ⚠️ Missing font in repo: $SRC"
-  fi
-done
-
-# --- Step 3: Refresh font cache ---
-echo "$(timestamp) 🔄 Refreshing font cache..."
-if [[ -d "$HOME/.fontconfig" ]]; then
-  # If legacy directory exists, show full fc-cache output (for transparency)
-  fc-cache -fv "$FONT_DIR"
-else
-  # Otherwise, hide only the benign “not cleaning non-existent cache directory” notice
-  fc-cache -fv "$FONT_DIR" 2>&1 | grep -v "not cleaning non-existent cache directory"
+if [ "$EUID" -eq 0 ]; then
+  log "ERROR Do not run add-font.sh as root. Exiting."
+  exit 1
 fi
 
-# --- Step 4: Verification summary ---
-echo "$(timestamp) 🧩 Installed custom fonts:"
-find "$CUSTOM_DIR" -type f -iname "*.otf" | sed 's/^/   /'
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ASSET_DIR="$REPO_ROOT/assets/fonts"
+DEST_DIR="$HOME/.local/share/fonts/custom"
+mkdir -p "$DEST_DIR"
 
-echo "$(timestamp) ------------------------------------------------------------"
-echo "$(timestamp) 🎉 Font installation completed successfully for $USER."
-echo "$(timestamp) 🪶 Log saved to: $LOG_FILE"
+shopt -s nullglob
+count=0
+for f in "$ASSET_DIR"/*/*; do
+  fname="$(basename "$f")"
+  cp -f "$f" "$DEST_DIR/$fname"
+  chmod 644 "$DEST_DIR/$fname"
+  log "OK Installed font: $fname"
+  count=$((count + 1))
+done
+shopt -u nullglob
+
+if ((count == 0)); then
+  log "WARN No fonts found under $ASSET_DIR"
+else
+  log "OK Installed $count fonts to $DEST_DIR"
+fi
+
+fc-cache -fv "$HOME/.local/share/fonts" >/dev/null 2>&1 || log "WARN fc-cache refresh failed"
+log "✅ add-font.sh finished"
