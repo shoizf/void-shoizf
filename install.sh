@@ -31,7 +31,7 @@ log "▶ Starting install.sh"
 
 # --- Source VM detection utility (repo-friendly detection) ---
 if [ -f "$UTILS_DIR/is_vm.sh" ]; then
-  # is_vm.sh prints true/false and sets IS_VM variable
+  # is_vm.sh sets IS_VM variable
   source "$UTILS_DIR/is_vm.sh"
   : "${IS_VM:=false}"
   log "INFO VM detection: IS_VM=${IS_VM}"
@@ -59,12 +59,24 @@ INSTALLERS=(
   "niri"
   "waybar"
   "hyprlock"
-  "sddm_astronaut"
+  "sddm_astronaut" # requires sudo
+  "intel"          # requires sudo
+  "vulkan-intel"   # requires sudo
+  "nvidia"         # requires sudo
+  "networkman"     # requires sudo
+  "grub"           # requires sudo
+)
+
+# --- List of all scripts that must be run as root ---
+# (Moved outside the loop per review suggestion)
+ROOT_INSTALLERS=(
+  "install-packages"
+  "grub"
+  "networkman"
   "intel"
   "vulkan-intel"
   "nvidia"
-  "networkman"
-  "grub"
+  "sddm_astronaut"
 )
 
 # --- Run installers ---
@@ -77,27 +89,40 @@ for installer in "${INSTALLERS[@]}"; do
   fi
 
   # Skip certain hardware installers on VMs
-  if [[ "$IS_VM" == true && "$installer" =~ ^(intel|nvidia|networkman)$ ]]; then
+  if [[ "$IS_VM" == true && "$installer" =~ ^(intel|vulkan-intel|nvidia|networkman)$ ]]; then
     log "SKIP ${installer}.sh — skipped for VM environment."
     continue
   fi
 
   log "▶ Running ${installer}.sh"
 
-  # Decide whether to run with sudo (install-packages requires root)
-  if [[ "$installer" == "install-packages" ]]; then
-    # must be run as root — we call with sudo
+  # Check if the current installer is in the root list
+  is_root_script=false
+  for root_script in "${ROOT_INSTALLERS[@]}"; do
+    if [[ "$installer" == "$root_script" ]]; then
+      is_root_script=true
+      break
+    fi
+  done
+
+  # Decide whether to run with sudo
+  if [[ "$is_root_script" == true ]]; then
+    # must be run as root
     if sudo bash "$SCRIPT_PATH"; then
       log "OK ${installer}.sh completed (sudo)"
     else
-      log "ERROR ${installer}.sh (sudo) failed — continuing"
+      # (Added exit code logging per review suggestion)
+      rc=$?
+      log "ERROR ${installer}.sh (sudo) failed with exit $rc — continuing"
     fi
   else
     # run as user; pass TARGET_USER and TARGET_USER_HOME for scripts that accept them
     if bash "$SCRIPT_PATH" "$TARGET_USER" "$TARGET_USER_HOME"; then
       log "OK ${installer}.sh completed"
     else
-      log "ERROR ${installer}.sh failed — continuing"
+      # (Added exit code logging per review suggestion)
+      rc=$?
+      log "ERROR ${installer}.sh failed with exit $rc — continuing"
     fi
   fi
 
