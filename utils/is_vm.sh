@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # utils/is_vm.sh — Detect virtualized environment (runit-friendly)
-# Sets IS_VM=true/false and echoes the same to stdout.
+# Sets IS_VM=true/false.
 # Returns 0 if VM detected, 1 if not.
 
 set -euo pipefail
@@ -28,11 +28,4 @@ fi
 # Export for other scripts that source this file
 export IS_VM
 
-# Print result for easy subshell checks
-if [[ "$IS_VM" == true ]]; then
-  echo "true"
-  exit 0
-else
-  echo "false"
-  exit 1
-fi
+# Do NOT echo or exit here. The parent script will read the variable.
