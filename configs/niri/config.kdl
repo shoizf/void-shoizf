@@ -31,6 +31,7 @@ spawn-at-startup "/home/shoi/go/bin/elephant"
 spawn-at-startup "waybar"
 spawn-sh-at-startup "mkfifo /home/shoi/.wob.sock || true; exec wob -i /home/shoi/.wob.sock"
 spawn-sh-at-startup "~/.local/bin/wallpaper-cycler.sh"
+spawn-at-startup "mako"
 
 // --- Audio ---
 spawn-at-startup "/usr/bin/pipewire"
