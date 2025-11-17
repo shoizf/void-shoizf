@@ -62,8 +62,9 @@ INSTALLERS=(
   "awww"
   "dev-tools"
   "niri"
-  "waybar"
+  "Waybar"
   "hyprlock"
+  "mako"
   "sddm_astronaut" # requires sudo
   "intel"          # requires sudo
   "vulkan-intel"   # requires sudo
