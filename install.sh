@@ -62,8 +62,8 @@ INSTALLERS=(
   "awww"
   "dev-tools"
   "niri"
-  "Waybar"
-  "hyprlock"
+  "waybar"
+  "hyprlock" # requires sudo
   "mako"
   "sddm_astronaut" # requires sudo
   "intel"          # requires sudo
@@ -82,6 +82,7 @@ ROOT_INSTALLERS=(
   "vulkan-intel"
   "nvidia"
   "sddm_astronaut"
+  "hyprlock"
 )
 
 # --- Run installers ---
