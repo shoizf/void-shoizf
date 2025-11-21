@@ -56,7 +56,7 @@ log "INFO Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
 
 # --- Ordered installer list (adjust order as required) ---
 INSTALLERS=(
-  "install-packages" # requires sudo
+  "packages" # requires sudo
   "add-font"
   "audio-integration"
   "awww"
@@ -75,7 +75,7 @@ INSTALLERS=(
 
 # --- List of all scripts that must be run as root ---
 ROOT_INSTALLERS=(
-  "install-packages"
+  "packages"
   "grub"
   "networkman"
   "intel"
