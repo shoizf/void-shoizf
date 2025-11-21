@@ -57,7 +57,7 @@ log "INFO Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
 # --- Ordered installer list (adjust order as required) ---
 INSTALLERS=(
   "packages" # requires sudo
-  "add-font"
+  "fonts"
   "audio-integration"
   "awww"
   "dev-tools"
