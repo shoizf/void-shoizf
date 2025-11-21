@@ -4,9 +4,9 @@
 
 set -euo pipefail
 
-# --- Logging ---
-# We are Root, but we log to the USER's folder (defined in install.sh)
-# If running standalone, we calculate paths manually.
+# --- 1. USER DETECTION (Crucial for Standalone Root Run) ---
+# If running from install.sh, TARGET_USER is set.
+# If running standalone via sudo, we must detect the real user.
 if [ -n "${TARGET_USER:-}" ]; then
   # Inherited from install.sh
   USER_HOME="$TARGET_HOME"
@@ -16,21 +16,27 @@ else
     TARGET_USER="$SUDO_USER"
     USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
   else
-    echo "❌ Run via sudo: sudo ./hyprlock.sh"
+    echo "❌ Error: When running standalone, use sudo."
+    echo "   Ex: sudo ./installers/hyprlock.sh"
     exit 1
   fi
 fi
 
+# --- 2. LOGGING SETUP ---
 LOG_BASE="$USER_HOME/.local/state/void-shoizf/log"
 mkdir -p "$LOG_BASE"
 SCRIPT_NAME="$(basename "$0" .sh)"
 
 if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
+  # SCENARIO A: Parent-driven (Append to master log)
   LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
 else
+  # SCENARIO B: Standalone (Create unique log)
   TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
   LOG_FILE="$LOG_BASE/${SCRIPT_NAME}-${TIMESTAMP}.log"
-  # Fix log ownership immediately if standalone
+
+  # FIX: Create the file first, THEN chown it
+  touch "$LOG_FILE"
   chown "$TARGET_USER" "$LOG_BASE" "$LOG_FILE"
 fi
 
@@ -46,7 +52,7 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# --- 1. CONFIGURE SYSTEM PERMISSIONS (The Root Task) ---
+# --- 3. CONFIGURE SYSTEM PERMISSIONS (The Root Task) ---
 SUDO_RULE="ALL ALL=(ALL) NOPASSWD: /usr/bin/zzz"
 SUDO_FILE="/etc/sudoers.d/void-shoizf-zzz"
 
@@ -59,7 +65,7 @@ else
   log "Sudoers rule already exists."
 fi
 
-# --- 2. DEFINE USER PATHS ---
+# --- 4. DEFINE USER PATHS ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "$SCRIPT_DIR" == */installers ]]; then
   REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -67,13 +73,11 @@ else
   REPO_ROOT="$(pwd)"
 fi
 
-# Use TARGET_HOME instead of $HOME (since $HOME is /root)
 HYPR_CONFIG_DIR="$USER_HOME/.config/hypr"
 ASSETS_DIR="$USER_HOME/.local/share/hypr/assets"
 BIN_DIR="$USER_HOME/.local/bin"
 
-# --- 3. INSTALL HELPER SCRIPTS (With User Ownership) ---
-# install -D creates dirs automatically. -o sets owner.
+# --- 5. INSTALL HELPER SCRIPTS (With User Ownership) ---
 log "Installing helper scripts..."
 HELPER_SCRIPTS=("battery-status.sh" "music-info.sh" "music-progress.sh" "shoizf-lock")
 
@@ -81,6 +85,7 @@ for script in "${HELPER_SCRIPTS[@]}"; do
   SRC="$REPO_ROOT/bin/$script"
   DEST="$BIN_DIR/$script"
   if [ -f "$SRC" ]; then
+    # install -D creates destination dirs if missing
     install -D -m 755 -o "$TARGET_USER" -g "$TARGET_USER" "$SRC" "$DEST"
     log "OK Installed $script"
   else
@@ -88,7 +93,7 @@ for script in "${HELPER_SCRIPTS[@]}"; do
   fi
 done
 
-# --- 4. INSTALL ASSETS ---
+# --- 6. INSTALL ASSETS ---
 SRC_BG="$REPO_ROOT/configs/hypr/assets/hyprlockbg.jpg"
 DEST_BG="$ASSETS_DIR/hyprlockbg.jpg"
 
@@ -99,15 +104,13 @@ else
   log "WARN Background missing"
 fi
 
-# --- 5. INSTALL HYPRLOCK CONFIG ---
+# --- 7. INSTALL HYPRLOCK CONFIG ---
 SOURCE_LOCK="$REPO_ROOT/configs/hypr/hyprlock.conf"
 DEST_LOCK="$HYPR_CONFIG_DIR/hyprlock.conf"
 
 if [ -f "$SOURCE_LOCK" ]; then
-  # We generate to a temp file, sed it, then install it as user
   TMP_LOCK="$(mktemp)"
-  # Fix path: Replace ~/.local... with actual /home/user/.local...
-  # This is safer than assuming ~ works in all contexts
+  # Fix path: Replace ~/.local... with actual absolute path for safety
   sed "s|~/.local/share/hypr/assets/hyprlockbg.jpg|$DEST_BG|g" "$SOURCE_LOCK" >"$TMP_LOCK"
 
   install -D -m 644 -o "$TARGET_USER" -g "$TARGET_USER" "$TMP_LOCK" "$DEST_LOCK"
@@ -117,17 +120,16 @@ else
   log "WARN hyprlock.conf missing"
 fi
 
-# --- 6. CONFIGURE HYPRIDLE ---
+# --- 8. CONFIGURE HYPRIDLE ---
 TEMPLATE_IDLE="$REPO_ROOT/configs/hypr/hypridle.conf.template"
 DEST_IDLE="$HYPR_CONFIG_DIR/hypridle.conf"
 
-# Detect Power Management
 DPMS_METHOD="none"
 SCREEN_OFF="echo '[hyprlock] Screen off skipped'"
 SCREEN_ON=":"
 SUSPEND="echo '[hyprlock] Suspend skipped'"
 
-# Checks (We must check user environment, simplified here for root)
+# Environment checks (simple command check as root is sufficient for binaries)
 if command -v niri >/dev/null 2>&1; then
   SCREEN_OFF="niri msg action power-off-monitors"
   log "INFO Detected Niri"
@@ -136,7 +138,6 @@ elif command -v wlr-randr >/dev/null 2>&1; then
   log "INFO Detected wlr-randr"
 fi
 
-# Note: We use 'sudo zzz' here because we just enabled it above!
 if command -v zzz >/dev/null 2>&1; then
   SUSPEND="sudo zzz"
 elif command -v systemctl >/dev/null 2>&1; then SUSPEND="systemctl suspend"; fi
