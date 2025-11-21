@@ -39,7 +39,7 @@ log "[${SCRIPT_NAME}] Starting package install"
 
 PACKAGES=(
   niri xdg-utils xdg-desktop-portal-wlr wayland base-devel
-  xwayland-satellite polkit-kde-agent swaybg alacritty zsh walker waybar wob mpc yazi
+  xwayland-satellite polkit-kde-agent swaybg alacritty zsh walker Waybar wob mpc yazi
   pcmanfm pavucontrol swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
   power-profiles-daemon firefox sddm tmux ripgrep fd tree dbus-libs dbus-x11 cups cups-filters acpi jq dateutils
   wlr-randr procps-ng playerctl lsd unzip flatpak elogind nodejs mako wget scdoc liblz4-devel dolphin qalculate-qt curl git desktop-file-utils gtk+3 lm_sensors neovim
