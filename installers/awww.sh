@@ -1,81 +1,97 @@
 #!/usr/bin/env bash
 # installers/awww.sh — build & install awww and wallpaper-cycler
+# Run as USER (privileges dropped from install.sh)
 
 set -euo pipefail
 
-# --- Logging setup ---
-LOG_DIR="$HOME/.local/log/void-shoizf"
-mkdir -p "$LOG_DIR"
+# --- 1. USER VALIDATION ---
+if [ "$EUID" -eq 0 ]; then
+  echo "❌ ERROR: awww.sh must be run as USER (not root)."
+  exit 1
+fi
+
+# --- 2. LOGGING SETUP ---
+LOG_BASE="$HOME/.local/state/void-shoizf/log"
+mkdir -p "$LOG_BASE"
 SCRIPT_NAME="$(basename "$0" .sh)"
 
-# Check if we're being run by the master installer
-if [ -n "$VOID_SHOIZF_MASTER_LOG" ]; then
+if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
   LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
 else
-  # We are being run directly, create our own log
   TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
-  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+  LOG_FILE="$LOG_BASE/${SCRIPT_NAME}-${TIMESTAMP}.log"
+  touch "$LOG_FILE"
 fi
 
 log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
   echo "$msg" | tee -a "$LOG_FILE"
 }
-# --- End Logging setup ---
 
 log "▶ awww.sh starting"
 
-if [ "$EUID" -eq 0 ]; then
-  log "ERROR Do not run awww.sh as root. Exiting."
-  exit 1
-fi
-
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="$HOME/builds"
-AWWW_DIR="$BUILD_DIR/awww"
-mkdir -p "$BUILD_DIR"
-
-DEPS=(gcc git pkg-config liblz4-devel wayland-devel wayland-protocols scdoc jq wget curl)
-log "INFO Installing build deps: ${DEPS[*]}"
-sudo xbps-install -Sy --yes "${DEPS[@]}" || log "WARN Some build deps may have failed"
-
-# rustup / cargo
-if ! command -v cargo >/dev/null 2>&1; then
-  log "INFO Installing rustup for user"
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  export PATH="$HOME/.cargo/bin:$PATH"
-fi
-log "INFO Using cargo at $(command -v cargo || echo 'not found')"
-
-# Clone or update
-if [ -d "$AWWW_DIR" ]; then
-  log "INFO Updating existing awww repo"
-  git -C "$AWWW_DIR" pull || log "WARN Failed to git pull awww"
+# --- 3. PATHS ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$SCRIPT_DIR" == */installers ]]; then
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 else
-  log "INFO Cloning awww repo"
-  git clone https://codeberg.org/LGFae/awww.git "$AWWW_DIR" || log "WARN git clone failed"
+  REPO_ROOT="$(pwd)"
 fi
 
-cd "$AWWW_DIR" || {
-  log "ERROR awww dir missing"
-  exit 1
-}
-log "INFO Building awww (release)"
-if ! cargo build --release; then
-  log "ERROR Cargo build failed"
-  exit 1
+BIN_DIR="$HOME/.local/bin"
+WALLPAPER_DIR="$HOME/.local/share/wallpapers"
+BUILD_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/void-shoizf/builds/awww"
+
+mkdir -p "$BIN_DIR" "$WALLPAPER_DIR" "$BUILD_CACHE"
+
+# --- 4. RUST TOOLCHAIN SETUP (Local Override) ---
+# We intentionally ignore system cargo. We want Rustup managed toolchain.
+if [ ! -f "$HOME/.cargo/bin/cargo" ]; then
+  log "INFO Local Cargo not found. Installing Rustup..."
+  # -y: Disable confirmation prompts
+  # --no-modify-path: We handle path sourcing manually to avoid shell profile mess
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+else
+  log "INFO Local Rustup toolchain detected."
 fi
 
-# Install binaries (requires sudo)
-log "INFO Installing awww binaries to /usr/bin"
-sudo cp -f target/release/awww /usr/bin/awww || log "WARN Failed to copy awww"
-sudo cp -f target/release/awww-daemon /usr/bin/awww-daemon || log "WARN Failed to copy awww-daemon"
+# Force the script to use the local environment immediately
+if [ -f "$HOME/.cargo/env" ]; then
+  source "$HOME/.cargo/env"
+  log "INFO Sourced Rustup environment: $(command -v cargo)"
+else
+  log "WARN Could not source cargo env. Build might fail or use system cargo."
+fi
 
-# Install wallpaper-cycler script to user bin
-mkdir -p "$HOME/.local/bin"
-cp -f "$REPO_ROOT/bin/wallpaper-cycler.sh" "$HOME/.local/bin/wallpaper-cycler.sh"
-chmod +x "$HOME/.local/bin/wallpaper-cycler.sh"
-log "OK Wallpaper cycler installed to $HOME/.local/bin"
+# --- 5. BUILD AWWW ---
+if [ -d "$BUILD_CACHE/.git" ]; then
+  log "INFO Updating awww source..."
+  git -C "$BUILD_CACHE" pull --progress
+else
+  log "INFO Cloning awww (Shallow clone)..."
+  git clone --depth 1 --single-branch --progress https://codeberg.org/LGFae/awww.git "$BUILD_CACHE"
+fi
 
-rm -rf "$BUILD_DIR"
+log "INFO Building awww (release)..."
+cd "$BUILD_CACHE"
+# This will now definitely use the Rustup version because we sourced the env
+cargo build --release
+
+log "INFO Installing binaries to $BIN_DIR..."
+install -D -m 755 target/release/awww "$BIN_DIR/awww"
+install -D -m 755 target/release/awww-daemon "$BIN_DIR/awww-daemon"
+
+# --- 6. INSTALL CYCLER SCRIPT ---
+SRC_CYCLER="$REPO_ROOT/bin/wallpaper-cycler.sh"
+
+if [ -f "$SRC_CYCLER" ]; then
+  log "INFO Installing wallpaper-cycler.sh..."
+  install -D -m 755 "$SRC_CYCLER" "$BIN_DIR/wallpaper-cycler.sh"
+  log "OK Cycler installed"
+else
+  log "WARN Missing wallpaper-cycler.sh in repo!"
+fi
+
+# --- 7. CLEANUP ---
+# rm -rf "$BUILD_CACHE/target"
 log "✅ awww.sh finished"

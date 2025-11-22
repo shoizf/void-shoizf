@@ -30,6 +30,7 @@ spawn-at-startup "/usr/libexec/xdg-desktop-portal-gtk"
 spawn-at-startup "/home/shoi/go/bin/elephant"
 spawn-at-startup "waybar"
 spawn-sh-at-startup "mkfifo /home/shoi/.wob.sock || true; exec wob -i /home/shoi/.wob.sock"
+spawn-at-startup "awww-daemon"
 spawn-sh-at-startup "~/.local/bin/wallpaper-cycler.sh"
 spawn-at-startup "mako"
 
