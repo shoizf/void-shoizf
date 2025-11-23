@@ -1,25 +1,17 @@
 #!/usr/bin/env bash
-# installers/install-packages.sh — core system packages (must run as root)
+# installers/packages.sh — core system packages
+# Run as USER. Invokes sudo internally.
 
 set -euo pipefail
 
 # --- Logging setup ---
-# Find the user's home dir for logging, even when run as root
-if [ -n "$SUDO_USER" ]; then
-  USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-else
-  USER_HOME="$HOME"
-fi
-
-LOG_DIR="$USER_HOME/.local/log/void-shoizf"
+LOG_DIR="$HOME/.local/state/void-shoizf/log"
 mkdir -p "$LOG_DIR"
 SCRIPT_NAME="$(basename "$0" .sh)"
 
-# Check if we're being run by the master installer
-if [ -n "$VOID_SHOIZF_MASTER_LOG" ]; then
+if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
   LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
 else
-  # We are being run directly, create our own log
   TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
   LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
 fi
@@ -28,24 +20,53 @@ log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
   echo "$msg" | tee -a "$LOG_FILE"
 }
-# --- End Logging setup ---
 
-if [ "$EUID" -ne 0 ]; then
-  log "ERROR install-packages.sh must be run as root (via sudo)."
-  exit 1
+log "▶ packages.sh starting"
+
+# --- 1. REPO SETUP ---
+HYPR_REPO_CONF="/etc/xbps.d/hyprland-void.conf"
+HYPR_REPO_URL="repository=https://raw.githubusercontent.com/Makrennel/hyprland-void/repository-x86_64-glibc"
+
+if [ ! -f "$HYPR_REPO_CONF" ]; then
+  log "Adding Makrennel repo..."
+  echo "$HYPR_REPO_URL" | sudo tee "$HYPR_REPO_CONF" >/dev/null
+else
+  log "Makrennel repo config exists."
 fi
 
-log "[${SCRIPT_NAME}] Starting package install"
+# --- 2. FORCE INSTALL HYPR TOOLS ---
+log "Syncing repo and installing Hyprland utils..."
+if sudo xbps-install -Sy hyprlock hypridle; then
+  log "✅ Hyprlock/Hypridle installed."
+else
+  log "ERROR Failed to install Hyprlock/Hypridle. Check repo/network."
+fi
 
+# --- 3. CORE PACKAGES ---
 PACKAGES=(
-  niri xdg-utils xdg-desktop-portal-wlr wayland base-devel
-  xwayland-satellite polkit-kde-agent swaybg alacritty zsh walker Waybar wob mpc yazi
-  pcmanfm pavucontrol swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
+  # Build Tools
+  base-devel
+
+  # Xorg Drivers (Required for SDDM Input)
+  xorg-minimal xf86-input-libinput xf86-video-intel mesa-dri
+
+  # Desktop Environment
+  # Removed: swaybg (replaced by awww), alacritty (replaced by kitty)
+  niri xdg-utils xdg-desktop-portal-wlr wayland
+  xwayland-satellite polkit-kde-agent kitty zsh walker Waybar wob mpc yazi
+
+  # Audio & Media
+  pavucontrol playerctl mpv lsd dolphin
+
+  # System Utilities
+  # Moved qalculate-qt here
+  qalculate-qt pcmanfm swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
   power-profiles-daemon firefox sddm tmux ripgrep fd tree dbus-libs dbus-x11 cups cups-filters acpi jq dateutils
-  wlr-randr procps-ng playerctl lsd unzip flatpak elogind nodejs mako wget scdoc liblz4-devel dolphin qalculate-qt curl git desktop-file-utils gtk+3 lm_sensors neovim
+  wlr-randr procps-ng unzip flatpak elogind nodejs mako wget scdoc liblz4-devel curl git desktop-file-utils gtk+3 lm_sensors neovim
 )
 
-log "Installing ${#PACKAGES[@]} packages..."
-xbps-install -Sy --yes "${PACKAGES[@]}"
+# --- 4. INSTALL ---
+log "Installing ${#PACKAGES[@]} core packages..."
+sudo xbps-install -Sy --yes "${PACKAGES[@]}"
 
-log "Package install completed"
+log "✅ packages.sh finished"
