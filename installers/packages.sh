@@ -56,11 +56,10 @@ PACKAGES=(
   xwayland-satellite polkit-kde-agent kitty zsh walker Waybar wob mpc yazi
 
   # Audio & Media
-  pavucontrol playerctl mpv lsd dolphin
+  pavucontrol playerctl mpv pipewire wireplumber pipewire-pulse alsa-utils libspa-alsa sof-firmware
 
   # System Utilities
-  # Moved qalculate-qt here
-  qalculate-qt pcmanfm swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
+  qalculate-qt dolphin lsd swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
   power-profiles-daemon firefox sddm tmux ripgrep fd tree dbus-libs dbus-x11 cups cups-filters acpi jq dateutils
   wlr-randr procps-ng unzip flatpak elogind nodejs mako wget scdoc liblz4-devel curl git desktop-file-utils gtk+3 lm_sensors neovim
 )
