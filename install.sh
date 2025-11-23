@@ -1,135 +1,182 @@
 #!/usr/bin/env bash
-# install.sh — Main installer for void-shoizf (VM-aware)
-# Run as a normal user (not root). Calls root-required installers with sudo.
+# install.sh — Master Orchestrator (Root-Driven Mode)
+# MUST be run as root. Guaranteed zero-interruption execution.
 
 set -euo pipefail
 
-# --- Safety check ---
-if [ "$EUID" -eq 0 ]; then
-  echo "❌ This script should NOT be run as root."
+# --- 1. ROOT VALIDATION (The "No Interruption" Guarantee) ---
+if [ "$EUID" -ne 0 ]; then
+  echo "❌ ERROR: This script must be run as ROOT."
+  echo "👉 Usage: sudo ./install.sh"
   exit 1
 fi
 
-# --- Paths ---
+# --- 2. TARGET USER DETECTION ---
+if [ -n "${SUDO_USER:-}" ]; then
+  TARGET_USER="$SUDO_USER"
+else
+  echo "⚠️  Running directly as root (not via sudo)."
+  read -p "Enter the target username to install for: " TARGET_USER
+fi
+
+if ! id "$TARGET_USER" &>/dev/null; then
+  echo "❌ User '$TARGET_USER' does not exist."
+  exit 1
+fi
+
+# Get User Home & Group
+TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+TARGET_GROUP=$(id -gn "$TARGET_USER")
+
+echo "🚀 Initializing Installation for User: $TARGET_USER ($TARGET_HOME)"
+
+# --- 3. LOGGING SETUP ---
+LOG_DIR="$TARGET_HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+SCRIPT_NAME="void-shoizf-root"
+MASTER_LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+
+# Create file & fix ownership immediately so User can tail it
+touch "$MASTER_LOG_FILE"
+chown "$TARGET_USER:$TARGET_GROUP" "$LOG_DIR" "$MASTER_LOG_FILE"
+
+# Export variables so child scripts inherit them
+export VOID_SHOIZF_MASTER_LOG="$MASTER_LOG_FILE"
+export TARGET_USER
+export TARGET_HOME
+
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [MASTER] $*"
+  echo "$msg" | tee -a "$MASTER_LOG_FILE"
+  # Keep permissions correct after root writes to it
+  chown "$TARGET_USER:$TARGET_GROUP" "$MASTER_LOG_FILE"
+}
+
+log "▶ Starting Root-Driven Install for $TARGET_USER"
+
+# --- 4. PATHS & CONFIG ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UTILS_DIR="$SCRIPT_DIR/utils"
 INSTALLERS_DIR="$SCRIPT_DIR/installers"
-LOG_DIR="$HOME/.local/log/void-shoizf"
-mkdir -p "$LOG_DIR"
 
-# --- Master Log Setup ---
-TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
-SCRIPT_NAME="void-shoizf" # Master name for the combined log
-MASTER_LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
-
-# EXPORT the master log path for all child scripts
-export VOID_SHOIZF_MASTER_LOG="$MASTER_LOG_FILE"
-
-log() {
-  # Use the script's own name for its log entries
-  local script_basename="$(basename "$0" .sh)"
-  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$script_basename] $*"
-  echo "$msg" | tee -a "$MASTER_LOG_FILE"
-}
-
-log "▶ Starting install.sh (Master Log: $MASTER_LOG_FILE)"
-
-# --- Source VM detection utility (repo-friendly detection) ---
+# VM Detection
+IS_VM=false
 if [ -f "$UTILS_DIR/is_vm.sh" ]; then
-  # is_vm.sh sets IS_VM variable
   source "$UTILS_DIR/is_vm.sh"
   : "${IS_VM:=false}"
   log "INFO VM detection: IS_VM=${IS_VM}"
+fi
+
+# --- 5. CORE SYSTEM SERVICES (Tier 0) ---
+# We enable fundamental services here to ensure packages/sddm don't fail.
+log "Configuring Core Services..."
+
+SV_DIR="/etc/sv"
+RUNIT_DIR="/etc/runit/runsvdir/default"
+
+# DBUS ACTIVATION (Critical for SDDM & NetworkManager)
+if [ -d "$SV_DIR/dbus" ]; then
+  if [ ! -L "$RUNIT_DIR/dbus" ]; then
+    ln -s "$SV_DIR/dbus" "$RUNIT_DIR/dbus"
+    log "OK Enabled Core Service: dbus"
+  else
+    log "INFO Core Service dbus already active"
+  fi
 else
-  IS_VM=false
-  log "WARN utils/is_vm.sh not found; assuming IS_VM=false"
+  log "WARN dbus service not found (packages.sh will likely install it next)"
 fi
 
-# --- Determine TARGET_USER and HOME if not provided ---
-TARGET_USER=${TARGET_USER:-$(whoami)}
-TARGET_USER_HOME=${TARGET_USER_HOME:-$(getent passwd "$TARGET_USER" | cut -d: -f6)}
-if [ -z "$TARGET_USER_HOME" ]; then
-  log "ERROR Could not determine TARGET_USER_HOME for $TARGET_USER"
-  exit 1
-fi
-log "INFO Running installation for user: $TARGET_USER ($TARGET_USER_HOME)"
+# --- 6. INSTALLER DEFINITIONS ---
 
-# --- Ordered installer list (adjust order as required) ---
-INSTALLERS=(
-  "packages" # requires sudo
-  "fonts"
+ROOT_SCRIPTS=(
+  "packages"       # Installs xbps packages, setup repos
+  "hyprlock"       # Configures sudoers (Must be Root)
+  "sddm_astronaut" # /usr/share/sddm modifications
+  "intel"          # Kernel modules
+  "vulkan-intel"   # Drivers
+  "nvidia"         # Drivers
+  "networkman"     # System services
+  "grub"           # /boot config
+)
+
+USER_SCRIPTS=(
+  "fonts"             # ~/.local/share/fonts
+  "audio-integration" # Pipewire config
+  "awww"              # Wallpaper daemon build
+  "dev-tools"         # Neovim/Tmux
+  "niri"              # Window Manager config
+  "waybar"            # Status Bar config
+  "mako"              # Notification config
+)
+
+# EXECUTION ORDER (Logical Flow)
+EXECUTION_ORDER=(
+  "packages" # 1. Get software & repos (ROOT)
+  "fonts"    # 2. Assets (USER)
   "audio-integration"
-  "awww"
+  "awww" # 4. Build wallpaper tools (USER)
   "dev-tools"
   "niri"
   "waybar"
-  "hyprlock" # requires sudo
+  "hyprlock" # 8. Security & Sleep (ROOT)
   "mako"
-  "sddm_astronaut" # requires sudo
-  "intel"          # requires sudo
-  "vulkan-intel"   # requires sudo
-  "nvidia"         # requires sudo
-  "networkman"     # requires sudo
-  "grub"           # requires sudo
-)
-
-# --- List of all scripts that must be run as root ---
-ROOT_INSTALLERS=(
-  "packages"
-  "grub"
-  "networkman"
+  "sddm_astronaut" # 10. Login Manager (ROOT)
   "intel"
   "vulkan-intel"
   "nvidia"
-  "sddm_astronaut"
-  "hyprlock"
+  "networkman" # 14. Networking (ROOT)
+  "grub"       # 15. Bootloader (ROOT)
 )
 
-# --- Run installers ---
-for installer in "${INSTALLERS[@]}"; do
-  SCRIPT_PATH="$INSTALLERS_DIR/${installer}.sh"
+# --- 7. EXECUTION ENGINE ---
+
+for script_name in "${EXECUTION_ORDER[@]}"; do
+  SCRIPT_PATH="$INSTALLERS_DIR/${script_name}.sh"
 
   if [ ! -f "$SCRIPT_PATH" ]; then
     log "WARN Missing installer: $SCRIPT_PATH — skipping."
     continue
   fi
 
-  # Skip certain hardware installers on VMs
-  if [[ "$IS_VM" == true && "$installer" =~ ^(intel|vulkan-intel|nvidia|networkman)$ ]]; then
-    log "SKIP ${installer}.sh — skipped for VM environment."
+  # VM Skip Logic
+  if [[ "$IS_VM" == true && "$script_name" =~ ^(intel|vulkan-intel|nvidia|networkman)$ ]]; then
+    log "SKIP ${script_name}.sh — skipped for VM environment."
     continue
   fi
 
-  log "▶ Running ${installer}.sh"
-
-  # Check if the current installer is in the root list
-  is_root_script=false
-  for root_script in "${ROOT_INSTALLERS[@]}"; do
-    if [[ "$installer" == "$root_script" ]]; then
-      is_root_script=true
+  # Determine Mode
+  MODE="USER"
+  for r in "${ROOT_SCRIPTS[@]}"; do
+    if [[ "$r" == "$script_name" ]]; then
+      MODE="ROOT"
       break
     fi
   done
 
-  # Decide whether to run with sudo
-  if [[ "$is_root_script" == true ]]; then
-    # must be run as root. Use -E to pass the VOID_SHOIZF_MASTER_LOG env var.
-    if sudo -E bash "$SCRIPT_PATH"; then
-      log "OK ${installer}.sh completed (sudo)"
+  log "▶ Executing ${script_name}.sh [Mode: $MODE]"
+
+  if [[ "$MODE" == "ROOT" ]]; then
+    # RUN AS ROOT
+    # We preserve env vars so child scripts see MASTER_LOG and TARGET_USER
+    if bash "$SCRIPT_PATH"; then
+      log "OK ${script_name}.sh success"
     else
-      rc=$?
-      log "ERROR ${installer}.sh (sudo) failed with exit $rc — continuing"
+      log "ERROR ${script_name}.sh failed (Root mode)"
+      # Optional: exit 1 here if you want to stop on error
     fi
   else
-    # run as user; env var is inherited automatically
-    if bash "$SCRIPT_PATH" "$TARGET_USER" "$TARGET_USER_HOME"; then
-      log "OK ${installer}.sh completed"
+    # RUN AS USER (Drop Privileges)
+    # sudo -u preserves the environment variables we exported
+    if sudo -u "$TARGET_USER" VOID_SHOIZF_MASTER_LOG="$VOID_SHOIZF_MASTER_LOG" bash "$SCRIPT_PATH"; then
+      log "OK ${script_name}.sh success"
     else
-      rc=$?
-      log "ERROR ${installer}.sh failed with exit $rc — continuing"
+      log "ERROR ${script_name}.sh failed (User mode)"
     fi
   fi
-
 done
 
-log "✅ install.sh finished"
+# Final Cleanup
+chown -R "$TARGET_USER:$TARGET_GROUP" "$LOG_DIR"
+log "✅ Installation Sequence Complete."
