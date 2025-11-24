@@ -56,6 +56,7 @@ PACKAGES=(
 
   # Audio Stack
   pipewire wireplumber alsa-pipewire libspa-alsa
+  alsa-utils sof-firmware
   pavucontrol playerctl mpv lsd dolphin
 
   # System Utilities
