@@ -51,15 +51,17 @@ PACKAGES=(
   xorg-minimal xf86-input-libinput xf86-video-intel mesa-dri
 
   # Desktop Environment
-  # Removed: swaybg (replaced by awww), alacritty (replaced by kitty)
   niri xdg-utils xdg-desktop-portal-wlr wayland
   xwayland-satellite polkit-kde-agent kitty zsh walker Waybar wob mpc yazi
 
-  # Audio & Media
-  pavucontrol playerctl mpv pipewire wireplumber pipewire-pulse alsa-utils libspa-alsa sof-firmware
+  # Audio Stack
+  pipewire wireplumber alsa-pipewire libspa-alsa
+  alsa-utils sof-firmware
+  pavucontrol playerctl mpv lsd dolphin
 
   # System Utilities
-  qalculate-qt dolphin lsd swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
+  psmisc
+  qalculate-qt pcmanfm swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
   power-profiles-daemon firefox sddm tmux ripgrep fd tree dbus-libs dbus-x11 cups cups-filters acpi jq dateutils
   wlr-randr procps-ng unzip flatpak elogind nodejs mako wget scdoc liblz4-devel curl git desktop-file-utils gtk+3 lm_sensors neovim
 )

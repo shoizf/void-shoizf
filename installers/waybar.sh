@@ -32,7 +32,10 @@ CONFIG_SRC="$REPO_ROOT/configs/waybar"
 WAYBAR_DEST="$TARGET_HOME/.config/waybar"
 
 log "INFO Installing Waybar deps"
-sudo xbps-install -Sy --yes waybar brightnessctl wl-clipboard wireplumber power-profiles-daemon network-manager-applet || log "WARN waybar deps install had issues"
+# Added libspa-alsa and pipewire to prevent segfaults on audio module load
+sudo xbps-install -Sy --yes waybar brightnessctl wl-clipboard wireplumber \
+  power-profiles-daemon network-manager-applet libspa-alsa pipewire ||
+  log "WARN waybar deps install had issues"
 
 if [ -d "$WAYBAR_DEST" ]; then
   BACKUP_DIR="${WAYBAR_DEST}.bak-$(date +%Y%m%d-%H%M%S)"
