@@ -102,20 +102,20 @@ ROOT_SCRIPTS=(
 )
 
 USER_SCRIPTS=(
-  "fonts"             # ~/.local/share/fonts
-  "audio-integration" # Pipewire config
-  "awww"              # Wallpaper daemon build
-  "dev-tools"         # Neovim/Tmux
-  "niri"              # Window Manager config
-  "waybar"            # Status Bar config
-  "mako"              # Notification config
+  "fonts"     # ~/.local/share/fonts
+  "audio"     # Pipewire config
+  "awww"      # Wallpaper daemon build
+  "dev-tools" # Neovim/Tmux
+  "niri"      # Window Manager config
+  "waybar"    # Status Bar config
+  "mako"      # Notification config
 )
 
 # EXECUTION ORDER (Logical Flow)
 EXECUTION_ORDER=(
   "packages" # 1. Get software & repos (ROOT)
   "fonts"    # 2. Assets (USER)
-  "audio-integration"
+  "audio"
   "awww" # 4. Build wallpaper tools (USER)
   "dev-tools"
   "niri"
