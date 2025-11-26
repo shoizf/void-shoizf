@@ -44,26 +44,59 @@ fi
 
 # --- 3. CORE PACKAGES ---
 PACKAGES=(
-  # Build Tools
+  # --- 1. BASE SYSTEM & BUILD TOOLS ---
   base-devel
+  curl git wget unzip tree
 
-  # Xorg Drivers (Required for SDDM Input)
+  # --- 2. HARDWARE DRIVERS & BACKEND ---
+  # Xorg Minimal is required for SDDM login screen input
   xorg-minimal xf86-input-libinput xf86-video-intel mesa-dri
 
-  # Desktop Environment
-  niri xdg-utils xdg-desktop-portal-wlr wayland
-  xwayland-satellite polkit-kde-agent kitty zsh walker Waybar wob mpc yazi
+  # Audio Backend (The Full Stack)
+  # Included BOTH wireplumber (Core) and wireplumber-elogind (Integration)
+  pipewire wireplumber wireplumber-elogind
+  pipewire-pulse alsa-pipewire libspa-alsa
+  alsa-utils alsa-firmware sof-firmware rtkit
 
-  # Audio Stack
-  pipewire wireplumber alsa-pipewire libspa-alsa
-  alsa-utils sof-firmware
-  pavucontrol playerctl mpv lsd dolphin
+  # Power & Bluetooth
+  power-profiles-daemon acpi lm_sensors
 
-  # System Utilities
-  psmisc wl-clipboard
-  qalculate-qt pcmanfm swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
-  power-profiles-daemon firefox sddm tmux ripgrep fd tree dbus-libs dbus-x11 cups cups-filters acpi jq dateutils
-  wlr-randr procps-ng unzip flatpak elogind nodejs mako wget scdoc liblz4-devel curl git desktop-file-utils gtk+3 lm_sensors neovim
+  # --- 3. DESKTOP ENVIRONMENT (Niri) ---
+  niri xdg-utils xdg-desktop-portal-wlr xdg-desktop-portal-gtk wayland
+  xwayland-satellite polkit-kde-agent
+  sddm elogind dbus-libs dbus-x11
+
+  # --- 4. GUI APPLICATIONS ---
+  kitty        # Terminal
+  firefox      # Browser
+  dolphin      # File Manager
+  waybar       # Status Bar
+  walker       # App Launcher
+  mako         # Notifications
+  pavucontrol  # Volume Control
+  wob          # Volume/Brightness Overlay
+  swayimg      # Image Viewer
+  qalculate-qt # Calculator
+
+  # --- 5. CLI UTILITIES & TOOLS ---
+  neovim        # Editor
+  tmux          # Terminal Multiplexer
+  lsd           # Modern 'ls'
+  ripgrep fd jq # Search & JSON tools
+  psmisc        # 'killall' etc
+  wl-clipboard  # Clipboard manager
+  mpc playerctl # Media control
+  mpv           # Video player
+  scdoc         # Man page generator
+
+  # --- 6. LIBS & DEPS ---
+  cargo        # Rust package manager
+  nodejs       # JS Runtime
+  gtk+3        # GTK3 libs
+  liblz4-devel # Compression lib
+  desktop-file-utils
+  cups cups-filters # Printing
+  gammastep brightnessctl dateutils wlr-randr
 )
 
 # --- 4. INSTALL ---

@@ -88,6 +88,18 @@ else
   log "WARN dbus service not found (packages.sh will likely install it next)"
 fi
 
+# 2. RTKIT (Mandatory for PipeWire Realtime Audio)
+if [ -d "$SV_DIR/rtkit" ]; then
+  if [ ! -L "$RUNIT_DIR/rtkit" ]; then
+    log "INFO Enabling rtkit service..."
+    sudo ln -sf "$SV_DIR/rtkit" "$RUNIT_DIR/rtkit"
+  fi
+else
+  log "WARN rtkit service not found (Audio priority may suffer)"
+fi
+
+log "✅ Installation Sequence Complete."
+
 # --- 6. INSTALLER DEFINITIONS ---
 
 ROOT_SCRIPTS=(
