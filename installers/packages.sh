@@ -60,7 +60,7 @@ PACKAGES=(
   pavucontrol playerctl mpv lsd dolphin
 
   # System Utilities
-  psmisc
+  psmisc wl-clipboard
   qalculate-qt pcmanfm swayimg cargo gammastep brightnessctl xdg-desktop-portal-gtk
   power-profiles-daemon firefox sddm tmux ripgrep fd tree dbus-libs dbus-x11 cups cups-filters acpi jq dateutils
   wlr-randr procps-ng unzip flatpak elogind nodejs mako wget scdoc liblz4-devel curl git desktop-file-utils gtk+3 lm_sensors neovim
