@@ -158,7 +158,7 @@ for script_name in "${EXECUTION_ORDER[@]}"; do
     continue
   fi
 
-  # Determine Mode (preserve)
+  # Determine Mode (preserve classification)
   MODE="USER"
   for r in "${ROOT_SCRIPTS[@]}"; do
     if [[ "$r" == "$script_name" ]]; then
@@ -170,18 +170,25 @@ for script_name in "${EXECUTION_ORDER[@]}"; do
   log "▶ Executing ${script_name}.sh [Mode: $MODE]"
 
   if [[ "$MODE" == "ROOT" ]]; then
-    # Run the installer as root, but pipe its output back to 'tee' (user) so log file remains user-owned.
-    # Left side elevated, right side 'tee' runs as the invoking user.
-    # -E preserves exported environment variables like VOID_SHOIZF_MASTER_LOG
-    if sudo -E bash "$SCRIPT_PATH" 2>&1 | tee -a "$MASTER_LOG_FILE"; then
+    # Run script as root, inject TARGET_USER/TARGET_HOME explicitly
+    if sudo -E env \
+      "TARGET_USER=$TARGET_USER" \
+      "TARGET_HOME=$TARGET_HOME" \
+      "VOID_SHOIZF_MASTER_LOG=$VOID_SHOIZF_MASTER_LOG" \
+      bash "$SCRIPT_PATH" 2>&1 | tee -a "$MASTER_LOG_FILE"; then
       log "OK ${script_name}.sh success"
     else
       log "ERROR ${script_name}.sh failed (Root mode)"
-      # preserve original behavior: continue (you can change to 'exit 1' if you want fail-fast)
     fi
+
   else
-    # Run natively as user
-    if bash "$SCRIPT_PATH" 2>&1 | tee -a "$MASTER_LOG_FILE"; then
+    # Run script as actual user with correct HOME + env
+    if sudo -u "$TARGET_USER" -H env \
+      "HOME=$TARGET_HOME" \
+      "TARGET_USER=$TARGET_USER" \
+      "TARGET_HOME=$TARGET_HOME" \
+      "VOID_SHOIZF_MASTER_LOG=$VOID_SHOIZF_MASTER_LOG" \
+      bash "$SCRIPT_PATH" 2>&1 | tee -a "$MASTER_LOG_FILE"; then
       log "OK ${script_name}.sh success"
     else
       log "ERROR ${script_name}.sh failed (User mode)"
