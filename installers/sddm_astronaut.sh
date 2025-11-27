@@ -1,90 +1,145 @@
 #!/usr/bin/env bash
-# installers/sddm_astronaut.sh — install SDDM astronaut theme and enable jake-the-dog preset
-# Run as USER. Uses sudo for system modifications.
+# installers/sddm_astronaut.sh — install SDDM astronaut theme + Jake-the-Dog preset
+# USER-SCRIPT (run as normal user, uses sudo internally)
 
 set -euo pipefail
 
-# --- Logging setup ---
+# ------------------------------------------------------
+# 1. NORMALIZE CONTEXT
+# ------------------------------------------------------
+
+SCRIPT_NAME="$(basename "$0" .sh)"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+
 LOG_DIR="$HOME/.local/state/void-shoizf/log"
 mkdir -p "$LOG_DIR"
-SCRIPT_NAME="$(basename "$0" .sh)"
 
 if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
   LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
 else
-  TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
   LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
 fi
 
+QUIET_MODE=${QUIET_MODE:-true}
+
+# ------------------------------------------------------
+# 2. LOGGING HELPERS
+# ------------------------------------------------------
+
 log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" | tee -a "$LOG_FILE"
+  echo "$msg" >>"$LOG_FILE"
+  [ "$QUIET_MODE" = false ] && echo "$msg"
 }
+info() { log "INFO  $*"; }
+warn() { log "WARN  $*"; }
+error() { log "ERROR $*"; }
+ok() { log "OK    $*"; }
+pp() { echo -e "$*"; }
 
-log "▶ sddm_astronaut.sh starting"
+pp "▶ $SCRIPT_NAME"
+log "▶ Starting installer: $SCRIPT_NAME"
 
-# --- 1. INSTALL PACKAGES ---
-log "INFO Installing SDDM dependencies..."
-sudo xbps-install -Sy --yes sddm qt6-svg qt6-virtualkeyboard qt6-multimedia || log "WARN SDDM packages issues"
+# ------------------------------------------------------
+# 3. VALIDATION
+# ------------------------------------------------------
 
-# --- 2. CLONE THEME ---
+if [ "$EUID" -eq 0 ]; then
+  warn "$SCRIPT_NAME should be run as a normal user"
+fi
+
+# ------------------------------------------------------
+# 4. INSTALL SDDM + QT MODULES
+# ------------------------------------------------------
+
+info "Installing SDDM & Qt6 dependencies..."
+sudo xbps-install -yN sddm qt6-svg qt6-virtualkeyboard qt6-multimedia || warn "Some Qt dependencies had issues"
+
+# ------------------------------------------------------
+# 5. THEME INSTALLATION
+# ------------------------------------------------------
+
 THEME_BASE="/usr/share/sddm/themes"
 THEME_NAME="sddm-astronaut-theme"
 THEME_DIR="$THEME_BASE/$THEME_NAME"
 
-if [ -d "$THEME_DIR" ]; then
-  log "INFO Theme directory exists. Skipping clone."
+if [ ! -d "$THEME_DIR" ]; then
+  info "Cloning astronaut theme..."
+  sudo git clone --depth 1 https://github.com/Keyitdev/sddm-astronaut-theme.git "$THEME_DIR"
+  ok "Theme installed into $THEME_DIR"
 else
-  log "INFO Cloning Astronaut theme..."
-  git clone --depth 1 https://github.com/Keyitdev/sddm-astronaut-theme.git /tmp/sddm-astronaut
-  sudo mv /tmp/sddm-astronaut "$THEME_DIR"
-  log "OK Theme installed to $THEME_DIR"
+  info "Theme already installed → $THEME_DIR"
 fi
 
-# --- 3. CONFIGURE JAKE THE DOG PRESET ---
-# The README says to edit metadata.desktop to change the ConfigFile
+# ------------------------------------------------------
+# 6. SET THE JAKE-THE-DOG PRESET
+# ------------------------------------------------------
+
+TARGET_PRESET="jake_the_dog.conf"
+TARGET_PATH="Themes/$TARGET_PRESET"
 METADATA_FILE="$THEME_DIR/metadata.desktop"
-TARGET_CONF="Themes/jake_the_dog.conf"
 
-# Verify if the target config exists before switching (safety check)
-if [ -f "$THEME_DIR/$TARGET_CONF" ]; then
-  log "INFO Switching theme preset to Jake the Dog..."
-  # Use sed to replace the ConfigFile line
-  sudo sed -i "s|^ConfigFile=.*|ConfigFile=$TARGET_CONF|" "$METADATA_FILE"
-  log "OK Theme set to $TARGET_CONF"
+if [ ! -f "$THEME_DIR/$TARGET_PATH" ]; then
+  warn "Jake-the-Dog preset not found: $TARGET_PATH"
+  warn "Available presets: $(ls "$THEME_DIR/Themes")"
 else
-  log "WARN Jake the Dog config ($TARGET_CONF) not found. Keeping default."
-  # List available themes in log for debugging
-  log "Available themes: $(ls $THEME_DIR/Themes)"
+  info "Applying Jake-the-Dog preset..."
+
+  # Replace ConfigFile= line
+  sudo sed -i "s|^ConfigFile=.*|ConfigFile=$TARGET_PATH|" "$METADATA_FILE"
+
+  ok "Preset set to $TARGET_PRESET"
 fi
 
-# --- 4. INSTALL FONTS ---
-log "INFO Installing theme fonts..."
-sudo cp -r "$THEME_DIR/Fonts/"* /usr/share/fonts/ || true
-sudo fc-cache -f
+# ------------------------------------------------------
+# 7. INSTALL FONTS USED BY THEME
+# ------------------------------------------------------
 
-# --- 5. CONFIGURE SDDM SYSTEM-WIDE ---
-log "INFO Configuring /etc/sddm.conf..."
+if [ -d "$THEME_DIR/Fonts" ]; then
+  info "Copying theme fonts..."
+  sudo cp -r "$THEME_DIR/Fonts/"* /usr/share/fonts/
+  sudo fc-cache -f
+  ok "Fonts installed"
+else
+  warn "Theme has no Fonts directory"
+fi
+
+# ------------------------------------------------------
+# 8. WRITE SDDM CONFIG
+# ------------------------------------------------------
+
+info "Writing /etc/sddm.conf"
 
 sudo tee /etc/sddm.conf >/dev/null <<EOF
 [Theme]
 Current=$THEME_NAME
+ConfigFile=$TARGET_PATH
 EOF
 
-# Virtual Keyboard
 sudo mkdir -p /etc/sddm.conf.d
 sudo tee /etc/sddm.conf.d/virtualkbd.conf >/dev/null <<EOF
 [General]
 InputMethod=qtvirtualkeyboard
 EOF
 
-# --- 6. ENABLE SERVICE ---
+ok "SDDM config applied"
+
+# ------------------------------------------------------
+# 9. ENABLE + RESTART SDDM SERVICE
+# ------------------------------------------------------
+
 if [ ! -L /var/service/sddm ]; then
-  log "INFO Linking SDDM service..."
-  sudo ln -sf /etc/sv/sddm /var/service/sddm
-  log "OK SDDM service enabled"
-else
-  log "INFO SDDM service already enabled"
+  info "Enabling SDDM..."
+  sudo ln -sf /etc/sv/sddm /var/service/
 fi
 
-log "✅ sddm_astronaut.sh finished"
+info "Restarting SDDM service"
+sudo sv restart sddm || warn "Could not restart sddm (may not be running)"
+
+# ------------------------------------------------------
+# 10. END
+# ------------------------------------------------------
+
+log "✔ Finished installer: $SCRIPT_NAME"
+pp "✔ SDDM astronaut theme installed (Jake-the-Dog preset active)"
+exit 0

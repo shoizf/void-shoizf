@@ -1,44 +1,135 @@
 #!/usr/bin/env bash
-# installers/template — child installer template
+# installers/<name>.sh — Unified installer template for void-shoizf
+# Supports both standalone runs and parent-orchestrated runs.
 
 set -euo pipefail
 
-# --- Logging setup ---
-LOG_DIR="$HOME/.local/log/void-shoizf"
-mkdir -p "$LOG_DIR"
-SCRIPT_NAME="$(basename "$0" .sh)"
+# ------------------------------------------------------
+# 1. NORMALIZE CONTEXT
+# ------------------------------------------------------
 
-# Check if we're being run by the master installer
-if [ -n "$VOID_SHOIZF_MASTER_LOG" ]; then
-  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+SCRIPT_NAME="$(basename "$0" .sh)"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+
+# Detect correct HOME even when executed via sudo
+if [ -n "${SUDO_USER:-}" ]; then
+  TARGET_USER="$SUDO_USER"
+  TARGET_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
 else
-  # We are being run directly, create our own log
-  TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
-  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+  TARGET_USER="$(whoami)"
+  TARGET_HOME="$HOME"
 fi
+
+# Fallback if passwd lookup fails
+[ -z "${TARGET_HOME:-}" ] && TARGET_HOME="$HOME"
+
+# Logging location
+LOG_DIR="$TARGET_HOME/.local/log/void-shoizf"
+mkdir -p "$LOG_DIR"
+
+# Master installer orchestrated?
+if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
+  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+  MASTER_MODE=true
+else
+  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+  MASTER_MODE=false
+fi
+
+# Quiet minimal stdout unless overridden
+QUIET_MODE=${QUIET_MODE:-true}
+
+# ------------------------------------------------------
+# 2. LOGGING FUNCTIONS
+# ------------------------------------------------------
 
 log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" | tee -a "$LOG_FILE"
+  echo "$msg" >>"$LOG_FILE"
+  if [ "$QUIET_MODE" = false ]; then echo "$msg"; fi
 }
-# --- End Logging setup ---
 
-log "▶ template starting"
+info() { log "INFO  $*"; }
+warn() { log "WARN  $*"; }
+error() { log "ERROR $*"; }
+ok() { log "OK    $*"; }
 
-# Detect VM if util exists
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/../utils/is_vm.sh" ]; then
-  source "$SCRIPT_DIR/../utils/is_vm.sh" || true
-else
-  IS_VM=false
-fi
-log "INFO IS_VM=${IS_VM}"
+# Minimal terminal output for user visibility
+pp() { echo -e "$*"; }
 
-# Example: skip heavy hardware steps when running in VM
-if [[ "$IS_VM" == true ]]; then
-  log "INFO Running in VM — skipping hardware-only steps"
-else
-  log "INFO Running on bare-metal — performing full steps"
-fi
+# ------------------------------------------------------
+# 3. STARTUP HEADER
+# ------------------------------------------------------
 
-log "✅ template finished"
+pp "▶ $SCRIPT_NAME"
+log "▶ Starting installer: $SCRIPT_NAME"
+info "User: $TARGET_USER | Home: $TARGET_HOME"
+
+# ------------------------------------------------------
+# 4. VALIDATION (override in each script)
+# ------------------------------------------------------
+# USER-SCRIPT example:
+# if [ "$EUID" -eq 0 ]; then
+#   warn "This script is intended to run as USER, not root"
+# fi
+#
+# ROOT-SCRIPT example:
+# if [ "$EUID" -ne 0 ]; then
+#   error "This script must be executed as ROOT"
+#   exit 1
+# fi
+#
+# Optional checks:
+# command -v git >/dev/null 2>&1 || warn "git not installed"
+
+# ------------------------------------------------------
+# 5. CORE LOGIC
+# ------------------------------------------------------
+#
+# !!! ABSOLUTE RULES FOR ALL INSTALLERS !!!
+#
+# 1. NEVER modify repository source files.
+#
+# 2. For file writes, ALWAYS use mktemp atomically:
+#       TMP="$(mktemp)"
+#       cp "$SRC" "$TMP"
+#       sudo mv "$TMP" "$DEST"
+#
+# 3. ALWAYS mkdir -p before writing.
+#
+# 4. USER-SCRIPT rules:
+#     - Never touch /etc, /usr/share, or system paths *without explicit sudo*.
+#     - Never enable services (root-scripts do that).
+#
+# 5. ROOT-SCRIPT rules:
+#     - Must be run via install.sh (ROOT_SCRIPTS phase).
+#     - Can modify /etc, /usr/share, /var/service.
+#
+# 6. IDEMPOTENCY:
+#     - Re-runs must not break the system.
+#     - Use checks like:
+#         [ -f "$DEST" ] && info "Already exists" || ...
+#         [ -d "$DEST" ] && backup first
+#
+# 7. REPO ROOT DETECTION (if needed):
+#     REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+#
+# Example usage:
+#
+# DEST_DIR="$TARGET_HOME/.config/<app>"
+# mkdir -p "$DEST_DIR"
+#
+# SRC="$REPO_ROOT/configs/<app>/config"
+# TMP="$(mktemp)"
+# cp "$SRC" "$TMP"
+# mv "$TMP" "$DEST_DIR/config"
+#
+# ok "<app> config installed"
+
+# ------------------------------------------------------
+# 6. END
+# ------------------------------------------------------
+
+log "✔ Finished installer: $SCRIPT_NAME"
+pp "✔ $SCRIPT_NAME done"
+exit 0

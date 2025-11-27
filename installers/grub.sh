@@ -1,86 +1,150 @@
 #!/usr/bin/env bash
 # installers/grub.sh — install & configure GRUB (EFI)
+# ROOT-SCRIPT — must be executed as root by install.sh
 
 set -euo pipefail
 
-# --- Logging setup ---
-# Find the user's home dir for logging, even when run as root
-if [ -n "$SUDO_USER" ]; then
-  USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-else
-  USER_HOME="$HOME"
-fi
+# ------------------------------------------------------
+# 1. NORMALIZE CONTEXT
+# ------------------------------------------------------
 
-LOG_DIR="$USER_HOME/.local/log/void-shoizf"
-mkdir -p "$LOG_DIR"
 SCRIPT_NAME="$(basename "$0" .sh)"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-# Check if we're being run by the master installer
-if [ -n "$VOID_SHOIZF_MASTER_LOG" ]; then
-  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+# Determine correct user's home for logging (not for data)
+if [ -n "${TARGET_HOME:-}" ]; then
+  LOG_USER_HOME="$TARGET_HOME"
+elif [ -n "${SUDO_USER:-}" ]; then
+  LOG_USER_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
 else
-  # We are being run directly, create our own log
-  TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
-  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+  LOG_USER_HOME="/root"
 fi
 
+# Master mode vs standalone mode
+if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
+  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+  MASTER_MODE=true
+else
+  LOG_DIR="$LOG_USER_HOME/.local/log/void-shoizf"
+  mkdir -p "$LOG_DIR"
+  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+  MASTER_MODE=false
+fi
+
+QUIET_MODE=${QUIET_MODE:-true}
+
+# ------------------------------------------------------
+# 2. LOGGING HELPERS
+# ------------------------------------------------------
 log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" | tee -a "$LOG_FILE"
+  echo "$msg" >>"$LOG_FILE"
+  if [ "$QUIET_MODE" = false ] && [ "$MASTER_MODE" = false ]; then echo "$msg"; fi
 }
-# --- End Logging setup ---
 
-log "▶ grub.sh starting"
+info() { log "INFO  $*"; }
+warn() { log "WARN  $*"; }
+error() { log "ERROR $*"; }
+ok() { log "OK    $*"; }
+pp() { echo -e "$*"; }
 
-if [ "$EUID" -eq 0 ]; then
-  log "INFO Running as root (required for grub install)"
-else
-  log "ERROR grub.sh must be invoked with sudo/root"
+# ------------------------------------------------------
+# 3. STARTUP & VALIDATION
+# ------------------------------------------------------
+pp "▶ $SCRIPT_NAME"
+log "▶ Starting installer: $SCRIPT_NAME"
+
+if [ "$EUID" -ne 0 ]; then
+  error "grub.sh must be run as root (via install.sh ROOT_SCRIPTS)"
+  pp "❌ grub: need root"
   exit 1
 fi
 
-set -x
-# Install packages
-xbps-install -Sy --yes intel-ucode grub-x86_64-efi os-prober || log "WARN grub packages installation had issues"
-
-THEME_DIR="/boot/grub/themes/crossgrub"
-THEME_REPO="https://github.com/krypciak/crossgrub.git"
+# ------------------------------------------------------
+# 4. WORKDIR
+# ------------------------------------------------------
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
+info "Workdir: $WORKDIR"
 
-if git clone --depth 1 "$THEME_REPO" "$WORKDIR"; then
+# ------------------------------------------------------
+# 5. INSTALL PACKAGES
+# ------------------------------------------------------
+info "Installing GRUB packages…"
+if xbps-install -Sy --yes intel-ucode grub-x86_64-efi os-prober >>"$LOG_FILE" 2>&1; then
+  ok "GRUB + dependencies installed"
+else
+  warn "xbps-install reported issues (see log)"
+fi
+
+# ------------------------------------------------------
+# 6. THEME INSTALLATION
+# ------------------------------------------------------
+THEME_DIR="/boot/grub/themes/crossgrub"
+THEME_REPO="https://github.com/krypciak/crossgrub.git"
+
+info "Cloning GRUB theme…"
+if git clone --depth 1 "$THEME_REPO" "$WORKDIR/theme" >>"$LOG_FILE" 2>&1; then
   rm -rf "$THEME_DIR" || true
   mkdir -p "$THEME_DIR"
-  cp -r "$WORKDIR"/* "$THEME_DIR/" || true
-  log "OK GRUB theme installed to $THEME_DIR"
+  cp -r "$WORKDIR/theme/"* "$THEME_DIR/" >>"$LOG_FILE" 2>&1
+  ok "GRUB theme installed → $THEME_DIR"
 else
-  log "WARN Could not clone GRUB theme"
+  warn "Theme clone failed — skipping theme setup"
 fi
 
-# Configure defaults
-if ! grep -q '^GRUB_THEME=' /etc/default/grub 2>/dev/null; then
-  echo "GRUB_THEME=\"${THEME_DIR}/theme.txt\"" >>/etc/default/grub
+# ------------------------------------------------------
+# 7. UPDATE /etc/default/grub
+# ------------------------------------------------------
+info "Updating /etc/default/grub settings…"
+
+GRUB_CFG="/etc/default/grub"
+THEME_TXT="$THEME_DIR/theme.txt"
+
+# Ensure GRUB_THEME
+if grep -q '^GRUB_THEME=' "$GRUB_CFG" 2>/dev/null; then
+  sed -i "s|^GRUB_THEME=.*|GRUB_THEME=\"$THEME_TXT\"|" "$GRUB_CFG"
 else
-  sed -i "s|^GRUB_THEME=.*|GRUB_THEME=\"${THEME_DIR}/theme.txt\"|" /etc/default/grub
+  echo "GRUB_THEME=\"$THEME_TXT\"" >>"$GRUB_CFG"
+fi
+ok "GRUB_THEME set"
+
+# Ensure GRUB_DISABLE_OS_PROBER=false
+if grep -q '^GRUB_DISABLE_OS_PROBER=' "$GRUB_CFG"; then
+  sed -i "s|^GRUB_DISABLE_OS_PROBER=.*|GRUB_DISABLE_OS_PROBER=false|" "$GRUB_CFG"
+else
+  echo "GRUB_DISABLE_OS_PROBER=false" >>"$GRUB_CFG"
+fi
+ok "OS prober enabled"
+
+# ------------------------------------------------------
+# 8. grub-install (EFI)
+# ------------------------------------------------------
+info "Running grub-install…"
+if grub-install --target=x86_64-efi \
+  --efi-directory=/boot/efi \
+  --bootloader-id=shoizf \
+  --recheck >>"$LOG_FILE" 2>&1; then
+  ok "grub-install completed"
+else
+  warn "grub-install failed (see log) — maybe missing EFI mount?"
 fi
 
-if ! grep -q '^GRUB_DISABLE_OS_PROBER=' /etc/default/grub 2>/dev/null; then
-  echo "GRUB_DISABLE_OS_PROBER=false" >>/etc/default/grub
+# ------------------------------------------------------
+# 9. Generate grub.cfg
+# ------------------------------------------------------
+info "Running grub-mkconfig…"
+if grub-mkconfig -o /boot/grub/grub.cfg >>"$LOG_FILE" 2>&1; then
+  ok "grub.cfg generated"
 else
-  sed -i "s|^GRUB_DISABLE_OS_PROBER=.*|GRUB_DISABLE_OS_PROBER=false|" /etc/default/grub
+  warn "Failed to generate grub.cfg — see log"
 fi
 
-# Install grub to EFI (best-effort)
-if ! grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=shoizf --recheck; then
-  log "WARN grub-install failed (check EFI mount)"
-else
-  log "OK grub-install completed"
-fi
+log "Summary: theme=$THEME_DIR, grub.cfg=/boot/grub/grub.cfg"
 
-if grub-mkconfig -o /boot/grub/grub.cfg; then
-  log "OK grub config generated"
-else
-  log "WARN grub-mkconfig failed"
-fi
-
-log "✅ grub.sh finished"
+# ------------------------------------------------------
+# 10. FINISH
+# ------------------------------------------------------
+log "✔ Finished installer: $SCRIPT_NAME"
+pp "✔ $SCRIPT_NAME done"
+exit 0

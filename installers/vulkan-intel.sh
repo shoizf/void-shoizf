@@ -1,62 +1,117 @@
 #!/usr/bin/env bash
-# installers/vulkan-intel.sh — install Intel Vulkan ICDs & helpers
+# installers/vulkan-intel.sh — Vulkan ICD verification for Intel/NVIDIA hybrid systems
+# ROOT-SCRIPT — invoked by install.sh (no package installs performed)
 
 set -euo pipefail
 
-# --- Logging setup ---
-# Find the user's home dir for logging, even when run as root
-if [ -n "$SUDO_USER" ]; then
-  USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+# ------------------------------------------------------
+# 1. CONTEXT NORMALIZATION
+# ------------------------------------------------------
+SCRIPT_NAME="$(basename "$0" .sh)"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+
+# Determine user for logs
+if [ -n "${SUDO_USER:-}" ]; then
+  TARGET_USER="$SUDO_USER"
+  TARGET_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
 else
-  USER_HOME="$HOME"
+  TARGET_USER="$(whoami)"
+  TARGET_HOME="$HOME"
 fi
 
-LOG_DIR="$USER_HOME/.local/log/void-shoizf"
+LOG_DIR="$TARGET_HOME/.local/log/void-shoizf"
 mkdir -p "$LOG_DIR"
-SCRIPT_NAME="$(basename "$0" .sh)"
 
-# Check if we're being run by the master installer
-if [ -n "$VOID_SHOIZF_MASTER_LOG" ]; then
+if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
   LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
 else
-  # We are being run directly, create our own log
-  TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
   LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
 fi
 
+QUIET_MODE=${QUIET_MODE:-true}
+
+# Logging helpers
 log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" | tee -a "$LOG_FILE"
+  echo "$msg" >>"$LOG_FILE"
+  [ "$QUIET_MODE" = false ] && echo "$msg"
 }
-# --- End Logging setup ---
+info() { log "INFO  $*"; }
+warn() { log "WARN  $*"; }
+error() { log "ERROR $*"; }
+ok() { log "OK    $*"; }
+pp() { echo -e "$*"; }
 
-log "▶ vulkan-intel.sh starting"
+pp "▶ $SCRIPT_NAME"
+log "▶ Starting $SCRIPT_NAME"
+info "Target user: $TARGET_USER"
+info "Target home: $TARGET_HOME"
 
+# ------------------------------------------------------
+# 2. VALIDATION
+# ------------------------------------------------------
 if [ "$EUID" -ne 0 ]; then
-  log "ERROR vulkan-intel.sh must be run as root"
+  error "This script must be executed as root (install.sh ROOT_SCRIPTS)"
   exit 1
 fi
 
-# Find the user who ran 'sudo'
-TARGET_USER=${SUDO_USER:-$(logname || whoami)}
-TARGET_USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
-if [ -z "$TARGET_USER_HOME" ]; then
-  log "ERROR Could not find user home to write .bash_profile. Exiting."
-  exit 1
-fi
+info "NOTE: Vulkan packages are handled by packages.sh — this script performs checks only."
 
-xbps-install -Sy --yes mesa-vulkan-intel mesa-vulkan-intel-32bit vulkan-loader vulkan-loader-32bit vulkan-headers vulkan-validationlayers mesa-vulkan-lavapipe || log "WARN Vulkan packages may have issues"
+# ------------------------------------------------------
+# 3. DETECT ICDs
+# ------------------------------------------------------
+INTEL_ICD=$(ls /usr/share/vulkan/icd.d/*intel*.json 2>/dev/null || true)
+NVIDIA_ICD=$(ls /usr/share/vulkan/icd.d/*nvidia*.json 2>/dev/null || true)
 
-# Now, write to the correct user's home
-target_profile="$TARGET_USER_HOME/.bash_profile"
-
-if ! grep -q 'VK_ICD_FILENAMES' "$target_profile" 2>/dev/null; then
-  log "INFO Adding VK_ICD_FILENAMES to $target_profile"
-  echo 'export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/intel_icd.x86_64.json' >>"$target_profile"
-  chown "$TARGET_USER:$TARGET_USER" "$target_profile"
-  log "OK Added VK_ICD_FILENAMES to $target_profile"
+if [ -n "$INTEL_ICD" ]; then
+  ok "Intel Vulkan ICD found: $(basename "$INTEL_ICD")"
 else
-  log "OK VK_ICD_FILENAMES already present in $target_profile"
+  warn "Intel Vulkan ICD missing — install mesa-vulkan-intel if you need Intel Vulkan"
 fi
 
-log "✅ vulkan-intel.sh finished"
+if [ -n "$NVIDIA_ICD" ]; then
+  ok "NVIDIA Vulkan ICD found: $(basename "$NVIDIA_ICD")"
+else
+  warn "NVIDIA Vulkan ICD missing — PRIME offload may fail"
+fi
+
+# Hybrid-specific warnings
+if [ -n "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
+  info "Hybrid Vulkan stack detected (Intel primary + NVIDIA offload)."
+elif [ -n "$INTEL_ICD" ] && [ -z "$NVIDIA_ICD" ]; then
+  warn "Only Intel ICD present — NVIDIA offload will NOT expose Vulkan."
+elif [ -z "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
+  warn "Only NVIDIA ICD present — desktop compositors may break (missing Intel ICD!)."
+else
+  error "No Vulkan ICDs found — Vulkan subsystem is NOT functional."
+fi
+
+# ------------------------------------------------------
+# 4. Test Vulkan via vulkaninfo
+# ------------------------------------------------------
+if command -v vulkaninfo >/dev/null 2>&1; then
+  info "Running vulkaninfo --summary..."
+  if vulkaninfo --summary >>"$LOG_FILE" 2>&1; then
+    ok "vulkaninfo executed successfully"
+  else
+    warn "vulkaninfo reported issues — Vulkan configuration may be incomplete"
+  fi
+else
+  warn "vulkaninfo not installed — install vulkan-tools for debugging"
+fi
+
+# ------------------------------------------------------
+# 5. Guidance (no environment tampering)
+# ------------------------------------------------------
+info "NOTE: VK_ICD_FILENAMES will NOT be set globally — this breaks hybrid setups."
+info "Use per-app overrides only if needed:"
+info "  VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/intel_icd.x86_64.json <app>"
+info "For NVIDIA offload:"
+info "  prime-run <app>"
+
+# ------------------------------------------------------
+# 6. END
+# ------------------------------------------------------
+log "✔ Finished $SCRIPT_NAME"
+pp "✔ $SCRIPT_NAME done"
+exit 0

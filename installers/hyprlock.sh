@@ -1,135 +1,174 @@
 #!/usr/bin/env bash
-# installers/hyprlock.sh — install hyprlock/hypridle configs, helpers & assets
-# Run as ROOT. Configures specifically for Niri + Void Linux.
+# installers/hyprlock.sh — Install hyprlock/hypridle configs, assets & zzz sudo rule
+# ROOT-SCRIPT — executed via install.sh
 
 set -euo pipefail
 
-# --- 1. USER DETECTION ---
-if [ -n "${TARGET_USER:-}" ]; then
-  USER_HOME="$TARGET_HOME"
-else
-  if [ -n "${SUDO_USER:-}" ]; then
-    TARGET_USER="$SUDO_USER"
-    USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
-  else
-    echo "❌ Run via sudo: sudo ./installers/hyprlock.sh"
-    exit 1
-  fi
-fi
-
-# --- 2. LOGGING SETUP ---
-LOG_BASE="$USER_HOME/.local/state/void-shoizf/log"
-mkdir -p "$LOG_BASE"
+# ------------------------------------------------------
+# 1. CONTEXT NORMALIZATION (never use $HOME)
+# ------------------------------------------------------
 SCRIPT_NAME="$(basename "$0" .sh)"
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
-  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
-else
-  TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
-  LOG_FILE="$LOG_BASE/${SCRIPT_NAME}-${TIMESTAMP}.log"
-  touch "$LOG_FILE"
-  chown "$TARGET_USER" "$LOG_BASE" "$LOG_FILE"
-fi
-
-log() {
-  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" | tee -a "$LOG_FILE"
-}
-
-log "▶ hyprlock.sh starting (Root Mode - Niri Preset)"
-
-if [ "$EUID" -ne 0 ]; then
-  log "ERROR hyprlock.sh must be run as ROOT."
+# install.sh exports TARGET_USER / TARGET_HOME for all ROOT scripts
+if [ -z "${TARGET_USER:-}" ] || [ -z "${TARGET_HOME:-}" ]; then
+  echo "❌ ERROR: hyprlock.sh requires TARGET_USER and TARGET_HOME from install.sh" >&2
   exit 1
 fi
 
-# --- 3. CONFIGURE SYSTEM PERMISSIONS ---
-SUDO_RULE="ALL ALL=(ALL) NOPASSWD: /usr/bin/zzz"
+USER_HOME="$TARGET_HOME"
+
+# Determine logging file
+if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
+  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+  MASTER_MODE=true
+else
+  LOG_DIR="$USER_HOME/.local/log/void-shoizf"
+  mkdir -p "$LOG_DIR"
+  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+  MASTER_MODE=false
+fi
+
+QUIET_MODE=${QUIET_MODE:-true}
+
+# ------------------------------------------------------
+# 2. LOGGING FUNCTIONS
+# ------------------------------------------------------
+log() {
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+  echo "$msg" >>"$LOG_FILE"
+  if [ "$QUIET_MODE" = false ] && [ "$MASTER_MODE" = false ]; then echo "$msg"; fi
+}
+info() { log "INFO  $*"; }
+warn() { log "WARN  $*"; }
+error() { log "ERROR $*"; }
+ok() { log "OK    $*"; }
+pp() { echo -e "$*"; }
+
+# ------------------------------------------------------
+# 3. VALIDATION
+# ------------------------------------------------------
+pp "▶ $SCRIPT_NAME"
+log "▶ Starting hyprlock installer for $TARGET_USER ($USER_HOME)"
+
+if [ "$EUID" -ne 0 ]; then
+  error "hyprlock.sh must run as root"
+  exit 1
+fi
+
+if [ ! -d "$USER_HOME" ]; then
+  error "User home directory not found: $USER_HOME"
+  exit 1
+fi
+
+# ------------------------------------------------------
+# 4. SUDOERS FOR zzz
+# ------------------------------------------------------
 SUDO_FILE="/etc/sudoers.d/void-shoizf-zzz"
+SUDO_RULE="${TARGET_USER} ALL=(ALL) NOPASSWD: /usr/bin/zzz"
 
-if [ ! -f "$SUDO_FILE" ]; then
-  log "Configuring NOPASSWD for zzz (suspend)..."
-  echo "$SUDO_RULE" >"$SUDO_FILE"
-  chmod 440 "$SUDO_FILE"
-  log "Permission granted: $SUDO_FILE"
-else
-  log "Sudoers rule already exists."
+info "Configuring sudoers rule for /usr/bin/zzz…"
+
+echo "$SUDO_RULE" >"$SUDO_FILE"
+chmod 440 "$SUDO_FILE"
+
+# Validate
+if ! visudo -c >/dev/null 2>&1; then
+  error "sudoers syntax invalid! Removing $SUDO_FILE to avoid lockout."
+  rm -f "$SUDO_FILE"
+  exit 1
 fi
 
-# --- 4. DEFINE PATHS ---
+ok "sudoers validated and installed"
+
+# ------------------------------------------------------
+# 5. PATH SETUP
+# ------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ "$SCRIPT_DIR" == */installers ]]; then
-  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-else
-  REPO_ROOT="$(pwd)"
-fi
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 HYPR_CONFIG_DIR="$USER_HOME/.config/hypr"
 ASSETS_DIR="$USER_HOME/.local/share/hypr/assets"
 BIN_DIR="$USER_HOME/.local/bin"
 
-# --- 5. INSTALL HELPER SCRIPTS ---
-log "Installing helper scripts..."
-HELPER_SCRIPTS=("battery-status.sh" "music-info.sh" "music-progress.sh" "shoizf-lock")
+mkdir -p "$HYPR_CONFIG_DIR" "$ASSETS_DIR" "$BIN_DIR"
+chown -R "$TARGET_USER:$TARGET_USER" "$USER_HOME/.config" "$USER_HOME/.local"
 
-for script in "${HELPER_SCRIPTS[@]}"; do
-  SRC="$REPO_ROOT/bin/$script"
-  DEST="$BIN_DIR/$script"
+# ------------------------------------------------------
+# 6. Install hyprlock + hypridle packages
+# ------------------------------------------------------
+info "Installing hyprlock + hypridle…"
+if xbps-install -Sy --yes hyprlock hypridle >>"$LOG_FILE" 2>&1; then
+  ok "hyprlock/hypridle installed"
+else
+  warn "Installation encountered issues"
+fi
+
+# ------------------------------------------------------
+# 7. Install helper scripts
+# ------------------------------------------------------
+HELPERS=(battery-status.sh music-info.sh music-progress.sh shoizf-lock)
+
+info "Installing helper scripts…"
+for h in "${HELPERS[@]}"; do
+  SRC="$REPO_ROOT/bin/$h"
+  DEST="$BIN_DIR/$h"
   if [ -f "$SRC" ]; then
     install -D -m 755 -o "$TARGET_USER" -g "$TARGET_USER" "$SRC" "$DEST"
-    log "OK Installed $script"
+    ok "Installed $h"
   else
-    log "WARN Missing script: $SRC"
+    warn "Missing: $SRC"
   fi
 done
 
-# --- 6. INSTALL ASSETS ---
+# ------------------------------------------------------
+# 8. Assets
+# ------------------------------------------------------
 SRC_BG="$REPO_ROOT/configs/hypr/assets/hyprlockbg.jpg"
 DEST_BG="$ASSETS_DIR/hyprlockbg.jpg"
 
 if [ -f "$SRC_BG" ]; then
   install -D -m 644 -o "$TARGET_USER" -g "$TARGET_USER" "$SRC_BG" "$DEST_BG"
-  log "OK Background installed"
+  ok "Installed background image"
 else
-  log "WARN Background missing"
+  warn "Missing background asset"
 fi
 
-# --- 7. INSTALL HYPRLOCK CONFIG ---
-SOURCE_LOCK="$REPO_ROOT/configs/hypr/hyprlock.conf"
+# ------------------------------------------------------
+# 9. hyprlock.conf (replace bg path)
+# ------------------------------------------------------
+SRC_LOCK="$REPO_ROOT/configs/hypr/hyprlock.conf"
 DEST_LOCK="$HYPR_CONFIG_DIR/hyprlock.conf"
 
-if [ -f "$SOURCE_LOCK" ]; then
-  TMP_LOCK="$(mktemp)"
-  sed "s|~/.local/share/hypr/assets/hyprlockbg.jpg|$DEST_BG|g" "$SOURCE_LOCK" >"$TMP_LOCK"
-  install -D -m 644 -o "$TARGET_USER" -g "$TARGET_USER" "$TMP_LOCK" "$DEST_LOCK"
-  rm "$TMP_LOCK"
-  log "OK hyprlock.conf installed"
+if [ -f "$SRC_LOCK" ]; then
+  sed "s|~/.local/share/hypr/assets/hyprlockbg.jpg|$DEST_BG|" "$SRC_LOCK" |
+    install -D -m 644 -o "$TARGET_USER" -g "$TARGET_USER" /dev/stdin "$DEST_LOCK"
+  ok "Installed hyprlock.conf"
 else
-  log "WARN hyprlock.conf missing"
+  warn "hyprlock.conf missing"
 fi
 
-# --- 8. CONFIGURE HYPRIDLE (Niri Hardcoded) ---
-TEMPLATE_IDLE="$REPO_ROOT/configs/hypr/hypridle.conf.template"
+# ------------------------------------------------------
+# 10. hypridle.conf (template → rendered)
+# ------------------------------------------------------
+SRC_IDLE="$REPO_ROOT/configs/hypr/hypridle.conf.template"
 DEST_IDLE="$HYPR_CONFIG_DIR/hypridle.conf"
 
-# Niri-specific Power Commands
-# We don't check for existence; we assume Niri is the target environment.
-SCREEN_OFF="niri msg action power-off-monitors"
-SCREEN_ON=":"
-SUSPEND="sudo zzz"
-
-if [ -f "$TEMPLATE_IDLE" ]; then
-  TMP_IDLE="$(mktemp)"
-  sed -e "s|__SCREEN_OFF_CMD__|$SCREEN_OFF|g" \
-    -e "s|__SCREEN_ON_CMD__|$SCREEN_ON|g" \
-    -e "s|__SUSPEND_CMD__|$SUSPEND|g" \
-    "$TEMPLATE_IDLE" >"$TMP_IDLE"
-
-  install -D -m 644 -o "$TARGET_USER" -g "$TARGET_USER" "$TMP_IDLE" "$DEST_IDLE"
-  rm "$TMP_IDLE"
-  log "OK hypridle.conf generated (Niri preset)"
+if [ -f "$SRC_IDLE" ]; then
+  sed \
+    -e "s|__SCREEN_OFF_CMD__|niri msg action power-off-monitors|g" \
+    -e "s|__SCREEN_ON_CMD__|:|g" \
+    -e "s|__SUSPEND_CMD__|/usr/bin/zzz|g" \
+    "$SRC_IDLE" |
+    install -D -m 644 -o "$TARGET_USER" -g "$TARGET_USER" /dev/stdin "$DEST_IDLE"
+  ok "Generated hypridle.conf"
 else
-  log "ERROR hypridle template missing"
+  warn "Idle template missing"
 fi
 
-log "✅ hyprlock.sh finished"
+# ------------------------------------------------------
+# 11. FINISH
+# ------------------------------------------------------
+log "✔ Finished installer: $SCRIPT_NAME"
+pp "✔ $SCRIPT_NAME done"
+exit 0
