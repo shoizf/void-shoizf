@@ -109,7 +109,7 @@ PACKAGES=(
   # --- Audio (PipeWire + ALSA) ---
   # --------------------------------------------------
   pipewire wireplumber wireplumber-elogind
-  alsa-pipewire libspa-alsa
+  pipewire-pulse alsa-pipewire libspa-alsa
   alsa-utils alsa-firmware sof-firmware
   rtkit
 
