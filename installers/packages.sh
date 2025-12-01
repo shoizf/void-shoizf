@@ -141,7 +141,7 @@ PACKAGES=(
   mesa-vulkan-intel mesa-vulkan-intel-32bit
   mesa-vulkan-lavapipe mesa-vulkan-lavapipe-32bit
   vulkan-loader vulkan-loader-32bit
-  vulkan-tools vulkan-validationlayers Vulkan-Headers
+  Vulkan-Tools vulkan-validationlayers Vulkan-Headers
 
   # --------------------------------------------------
   # --- GUI Apps ---
