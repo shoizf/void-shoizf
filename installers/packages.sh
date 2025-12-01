@@ -146,7 +146,7 @@ PACKAGES=(
   # --------------------------------------------------
   # --- GUI Apps ---
   # --------------------------------------------------
-  kitty firefox dolphin waybar walker mako pavucontrol
+  kitty firefox dolphin Waybar walker mako pavucontrol
   wob swayimg qalculate-qt
 
   # --------------------------------------------------
