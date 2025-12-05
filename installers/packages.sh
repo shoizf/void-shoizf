@@ -109,7 +109,7 @@ PACKAGES=(
   # --- Audio (PipeWire + ALSA) ---
   # --------------------------------------------------
   pipewire wireplumber wireplumber-elogind
-  alsa-pipewire libspa-alsa
+  pipewire-pulse alsa-pipewire libspa-alsa
   alsa-utils alsa-firmware sof-firmware
   rtkit
 
@@ -141,12 +141,12 @@ PACKAGES=(
   mesa-vulkan-intel mesa-vulkan-intel-32bit
   mesa-vulkan-lavapipe mesa-vulkan-lavapipe-32bit
   vulkan-loader vulkan-loader-32bit
-  Vulkan-Tools Vulkan-ValidationLayers Vulkan-Headers
+  vulkan-tools vulkan-validationlayers vulkan-headers
 
   # --------------------------------------------------
   # --- GUI Apps ---
   # --------------------------------------------------
-  kitty firefox dolphin Waybar walker mako pavucontrol
+  kitty firefox dolphin waybar walker mako pavucontrol
   wob swayimg qalculate-qt
 
   # --------------------------------------------------
