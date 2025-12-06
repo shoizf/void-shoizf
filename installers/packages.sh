@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 # installers/packages.sh — core system packages for void-shoizf
-# USER-SCRIPT (non-root; uses sudo internally)
+# HYBRID SCRIPT (runs as user, uses sudo for installation)
 
 set -euo pipefail
 
 # ------------------------------------------------------
 # 1. NORMALIZE CONTEXT
 # ------------------------------------------------------
-
 SCRIPT_NAME="$(basename "$0" .sh)"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
+# Master installer logging?
 if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
-  MASTER_MODE=true
-  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+    MASTER_MODE=true
+    LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
 else
-  MASTER_MODE=false
-  HOME="${HOME:-$TARGET_HOME}"
-  LOG_DIR="$HOME/.local/state/void-shoizf/log"
-  mkdir -p "$LOG_DIR"
-  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+    MASTER_MODE=false
+
+    TARGET_HOME="${TARGET_HOME:-$HOME}"
+    LOG_DIR="$TARGET_HOME/.local/state/void-shoizf/log"
+    mkdir -p "$LOG_DIR"
+
+    LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
 fi
 
 QUIET_MODE=${QUIET_MODE:-true}
@@ -27,102 +29,81 @@ QUIET_MODE=${QUIET_MODE:-true}
 # ------------------------------------------------------
 # 2. LOGGING FUNCTIONS
 # ------------------------------------------------------
-
 log() {
-  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" >>"$LOG_FILE"
-  [ "$QUIET_MODE" = false ] && echo "$msg"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+    echo "$msg" >>"$LOG_FILE"
+    [ "$QUIET_MODE" = false ] && echo "$msg"
 }
 
-info() { log "INFO  $*"; }
-warn() { log "WARN  $*"; }
+info()  { log "INFO  $*"; }
+warn()  { log "WARN  $*"; }
 error() { log "ERROR $*"; }
-ok() { log "OK    $*"; }
-pp() { echo -e "$*"; }
+ok()    { log "OK    $*"; }
+pp()    { echo -e "$*"; }
 
 # ------------------------------------------------------
-# 3. STARTUP HEADER
+# 3. HEADER
 # ------------------------------------------------------
-
 pp "▶ $SCRIPT_NAME"
 log "▶ Starting installer: $SCRIPT_NAME"
-info "Installing core packages into system"
+info "Installing verified core packages"
 
 # ------------------------------------------------------
 # 4. VALIDATION
 # ------------------------------------------------------
-
 if [ "$EUID" -eq 0 ]; then
-  warn "Running as root — packages.sh is intended for user execution"
+    warn "Running as root — packages.sh is intended for hybrid USER mode"
 fi
 
 # ------------------------------------------------------
-# 5. CORE LOGIC
+# 5.  PACKAGE LIST (Verified against Void Repo)
 # ------------------------------------------------------
-
-# ------------------------------------------------------
-# 5.1 VERIFIED PACKAGE LIST
-# ------------------------------------------------------
-
 PACKAGES=(
 
-  # Base System & Tools
   base-devel curl git wget unzip tree lsd ripgrep fd jq psmisc dateutils
 
-  # Hardware / CPU / Sensors
   lm_sensors acpi power-profiles-daemon upower
 
-  # Xorg / Input Drivers / Intel GPU
   xorg-minimal xf86-input-libinput xf86-video-intel
   mesa-dri intel-media-driver libva-utils mesa-vaapi mesa-demos
 
-  # Audio (PipeWire + ALSA)
   pipewire wireplumber wireplumber-elogind
   alsa-pipewire libspa-alsa alsa-utils alsa-firmware sof-firmware rtkit
 
-  # Networking
   NetworkManager networkmanager-dmenu nm-tray network-manager-applet
 
-  # Desktop Environment (Niri / Wayland)
   niri xdg-utils wayland
   xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr
   xwayland-satellite polkit-kde-agent sddm elogind dbus-libs dbus-x11
 
-  # NVIDIA PRIME OFFLOAD
   nvidia nvidia-dkms nvidia-firmware nvidia-libs nvidia-gtklibs
-  nvidia-vaapi-driver dkms libglvnd vulkan-loader
-  nvidia-libs-32bit
+  nvidia-vaapi-driver dkms libglvnd vulkan-loader nvidia-libs-32bit
 
-  # Vulkan (Intel + Software + Tools)
   mesa-vulkan-intel mesa-vulkan-lavapipe
   Vulkan-Tools Vulkan-ValidationLayers Vulkan-Headers
 
-  # GUI Apps
   kitty firefox dolphin Waybar walker mako pavucontrol wob swayimg qalculate-qt
 
-  # CLI Tools / Utilities
   neovim tmux wl-clipboard mpc playerctl mpv scdoc
 
-  # Dev Dependencies
   cargo nodejs gtk+3 liblz4-devel desktop-file-utils
   cups cups-filters gammastep brightnessctl wlr-randr
 )
 
 # ------------------------------------------------------
-# 5.2 INSTALL PACKAGES
+# 6. INSTALLATION
 # ------------------------------------------------------
-
 info "Installing ${#PACKAGES[@]} packages..."
+
 if sudo xbps-install -Sy "${PACKAGES[@]}"; then
-  ok "All packages installed successfully"
+    ok "All packages installed successfully"
 else
-  warn "One or more packages failed to install — check logs"
+    error "One or more packages failed to install"
 fi
 
 # ------------------------------------------------------
-# 6. END
+# 7. END
 # ------------------------------------------------------
-
 log "✔ Finished installer: $SCRIPT_NAME"
 pp "✔ $SCRIPT_NAME done"
 exit 0
