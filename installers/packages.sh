@@ -75,7 +75,7 @@ fi
 
 # --- 5.2 Force install Hyprlock and Hypridle ---
 info "Installing Hyprlock and Hypridle..."
-if sudo xbps-install -yN hyprlock hypridle; then
+if sudo xbps-install -Sy hyprlock hypridle; then
   ok "Hyprlock/Hypridle installed"
 else
   error "Failed to install Hyprlock/Hypridle — check repo or network"
@@ -167,7 +167,7 @@ PACKAGES=(
 # ------------------------------------------------------
 
 info "Installing ${#PACKAGES[@]} core packages..."
-if sudo xbps-install -yN "${PACKAGES[@]}"; then
+if sudo xbps-install -Sy "${PACKAGES[@]}"; then
   ok "All packages installed successfully"
 else
   warn "One or more packages failed to install — check logs"
