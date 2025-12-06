@@ -11,7 +11,6 @@ set -euo pipefail
 SCRIPT_NAME="$(basename "$0" .sh)"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-
 if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
   MASTER_MODE=true
   LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
@@ -62,91 +61,58 @@ fi
 # ------------------------------------------------------
 
 # ------------------------------------------------------
-# 5.1 PACKAGES — MASTER PACKAGE LIST
+# 5.1 VERIFIED PACKAGE LIST
 # ------------------------------------------------------
 
 PACKAGES=(
 
-  # --------------------------------------------------
-  # --- Base System & Tools ---
-  # --------------------------------------------------
+  # Base System & Tools
   base-devel curl git wget unzip tree lsd ripgrep fd jq psmisc dateutils
 
-  # --------------------------------------------------
-  # --- Hardware / CPU / Sensors ---
-  # --------------------------------------------------
+  # Hardware / CPU / Sensors
   lm_sensors acpi power-profiles-daemon upower
 
-  # --------------------------------------------------
-  # --- Xorg / Input Drivers / Intel GPU ---
-  # --------------------------------------------------
+  # Xorg / Input Drivers / Intel GPU
   xorg-minimal xf86-input-libinput xf86-video-intel
-  mesa-dri mesa-dri-32bit
-  intel-media-driver libva-utils
-  mesa-vaapi mesa-vaapi-32bit
-  mesa-demos
+  mesa-dri intel-media-driver libva-utils mesa-vaapi mesa-demos
 
-  # --------------------------------------------------
-  # --- Audio (PipeWire + ALSA) ---
-  # --------------------------------------------------
+  # Audio (PipeWire + ALSA)
   pipewire wireplumber wireplumber-elogind
-  pipewire-pulse alsa-pipewire libspa-alsa
-  alsa-utils alsa-firmware sof-firmware
-  rtkit
+  alsa-pipewire libspa-alsa alsa-utils alsa-firmware sof-firmware rtkit
 
-  # --------------------------------------------------
-  # --- Networking ---
-  # --------------------------------------------------
+  # Networking
   NetworkManager networkmanager-dmenu nm-tray network-manager-applet
 
-  # --------------------------------------------------
-  # --- Desktop Environment (Niri / Wayland) ---
-  # --------------------------------------------------
+  # Desktop Environment (Niri / Wayland)
   niri xdg-utils wayland
   xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr
-  xwayland-satellite polkit-kde-agent
-  sddm elogind dbus-libs dbus-x11
+  xwayland-satellite polkit-kde-agent sddm elogind dbus-libs dbus-x11
 
-  # --------------------------------------------------
-  # --- NVIDIA PRIME OFFLOAD (Hybrid: Intel primary + NVIDIA secondary) ---
-  # --------------------------------------------------
+  # NVIDIA PRIME OFFLOAD
   nvidia nvidia-dkms nvidia-firmware nvidia-libs nvidia-gtklibs
   nvidia-vaapi-driver dkms libglvnd vulkan-loader
-
-  # 32-bit NVIDIA
   nvidia-libs-32bit
 
-  # --------------------------------------------------
-  # --- Vulkan (Intel + Software + Tools) ---
-  # --------------------------------------------------
-  mesa-vulkan-intel mesa-vulkan-intel-32bit
-  mesa-vulkan-lavapipe mesa-vulkan-lavapipe-32bit
-  vulkan-loader vulkan-loader-32bit
-  vulkan-tools vulkan-validationlayers vulkan-headers
+  # Vulkan (Intel + Software + Tools)
+  mesa-vulkan-intel mesa-vulkan-lavapipe
+  Vulkan-Tools Vulkan-ValidationLayers Vulkan-Headers
 
-  # --------------------------------------------------
-  # --- GUI Apps ---
-  # --------------------------------------------------
-  kitty firefox dolphin waybar walker mako pavucontrol
-  wob swayimg qalculate-qt
+  # GUI Apps
+  kitty firefox dolphin Waybar walker mako pavucontrol wob swayimg qalculate-qt
 
-  # --------------------------------------------------
-  # --- CLI Tools / Utilities ---
-  # --------------------------------------------------
+  # CLI Tools / Utilities
   neovim tmux wl-clipboard mpc playerctl mpv scdoc
 
-  # --------------------------------------------------
-  # --- Dev Dependencies ---
-  # --------------------------------------------------
+  # Dev Dependencies
   cargo nodejs gtk+3 liblz4-devel desktop-file-utils
   cups cups-filters gammastep brightnessctl wlr-randr
 )
 
 # ------------------------------------------------------
-# 5.4 INSTALL ALL PACKAGES
+# 5.2 INSTALL PACKAGES
 # ------------------------------------------------------
 
-info "Installing ${#PACKAGES[@]} core packages..."
+info "Installing ${#PACKAGES[@]} packages..."
 if sudo xbps-install -Sy "${PACKAGES[@]}"; then
   ok "All packages installed successfully"
 else
