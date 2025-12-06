@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # installers/packages.sh — core system packages for void-shoizf
-# HYBRID SCRIPT (runs as user, uses sudo for installation)
+# HYBRID SCRIPT (runs as user, uses sudo for installation only)
 
 set -euo pipefail
 
@@ -10,28 +10,30 @@ set -euo pipefail
 SCRIPT_NAME="$(basename "$0" .sh)"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
+# Are we running under install.sh ?
 if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
     MASTER_MODE=true
     LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
 else
     MASTER_MODE=false
+
     TARGET_HOME="${TARGET_HOME:-$HOME}"
     LOG_DIR="$TARGET_HOME/.local/state/void-shoizf/log"
     mkdir -p "$LOG_DIR"
+
     LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
 fi
 
 QUIET_MODE=${QUIET_MODE:-true}
 
 # ------------------------------------------------------
-# 2. SAFE LOGGING (FIXED FOR set -e)
+# 2. LOGGING FUNCTIONS (FIXED FOR set -e)
 # ------------------------------------------------------
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
     echo "$msg" >>"$LOG_FILE"
 
-    # DO NOT USE: [ "$QUIET_MODE" = false ] && echo "$msg"
-    # set -e kills the script because the test returns 1
+    # Proper IF — so set -e does NOT kill the script
     if [ "$QUIET_MODE" = "false" ]; then
         echo "$msg"
     fi
@@ -44,37 +46,30 @@ ok()    { log "OK    $*"; }
 pp()    { echo -e "$*"; }
 
 # ------------------------------------------------------
-# 3. HEADER
+# 3. SCRIPT HEADER
 # ------------------------------------------------------
 pp "▶ $SCRIPT_NAME"
 log "▶ Starting installer: $SCRIPT_NAME"
-info "Installing verified core packages"
+info "Installing verified core packages…"
 
 # ------------------------------------------------------
 # 4. VALIDATION
 # ------------------------------------------------------
 if [ "$EUID" -eq 0 ]; then
-    warn "Running as root — should be hybrid USER mode"
+    warn "packages.sh is intended to run as USER (hybrid sudo mode)"
 fi
 
-# ------------------------------------------------------
-# 5. ENABLE REPOS (REQUIRED)
-# ------------------------------------------------------
-info "Enabling official repos (nonfree + multilib)..."
-
-if sudo xbps-install -y void-repo-nonfree void-repo-multilib void-repo-multilib-nonfree; then
-    ok "Repos enabled"
-    sudo xbps-install -Sy
-else
-    error "Failed to enable repos"
-    exit 1
-fi
+# Prevent duplicate sudo prompts
+info "Performing sudo warm-up…"
+sudo -v || { error "sudo authentication failed"; exit 1; }
 
 # ------------------------------------------------------
-# 6. PACKAGE LIST (VERIFIED)
+# 5. VERIFIED PACKAGE LIST
 # ------------------------------------------------------
 PACKAGES=(
+
   base-devel curl git wget unzip tree lsd ripgrep fd jq psmisc dateutils
+
   lm_sensors acpi power-profiles-daemon upower
 
   xorg-minimal xf86-input-libinput xf86-video-intel
@@ -104,19 +99,19 @@ PACKAGES=(
 )
 
 # ------------------------------------------------------
-# 7. INSTALLATION
+# 6. INSTALLATION
 # ------------------------------------------------------
-info "Installing ${#PACKAGES[@]} packages..."
+info "Installing ${#PACKAGES[@]} packages…"
 
 if sudo xbps-install -Sy "${PACKAGES[@]}"; then
     ok "All packages installed successfully"
 else
-    error "One or more packages failed"
+    error "One or more packages failed to install — see logs"
     exit 1
 fi
 
 # ------------------------------------------------------
-# 8. END
+# 7. END
 # ------------------------------------------------------
 log "✔ Finished installer: $SCRIPT_NAME"
 pp "✔ $SCRIPT_NAME done"
