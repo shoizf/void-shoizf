@@ -11,15 +11,16 @@ set -euo pipefail
 SCRIPT_NAME="$(basename "$0" .sh)"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-LOG_DIR="$HOME/.local/state/void-shoizf/log"
-mkdir -p "$LOG_DIR"
 
 if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
-  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
   MASTER_MODE=true
+  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
 else
-  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
   MASTER_MODE=false
+  HOME="${HOME:-$TARGET_HOME}"
+  LOG_DIR="$HOME/.local/state/void-shoizf/log"
+  mkdir -p "$LOG_DIR"
+  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
 fi
 
 QUIET_MODE=${QUIET_MODE:-true}
