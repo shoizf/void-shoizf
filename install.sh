@@ -105,6 +105,7 @@ log "✅ Core Services Configured."
 
 # --- 6. INSTALLER DEFINITIONS (preserve lists exactly) ---
 ROOT_SCRIPTS=(
+  "repos"
   "hyprlock"
   "sddm_astronaut"
   "intel"
@@ -126,6 +127,7 @@ USER_SCRIPTS=(
 )
 
 EXECUTION_ORDER=(
+  "repos"
   "packages"
   "fonts"
   "audio"
