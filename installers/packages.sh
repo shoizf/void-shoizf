@@ -27,7 +27,7 @@ fi
 QUIET_MODE=${QUIET_MODE:-true}
 
 # ------------------------------------------------------
-# 2. LOGGING FUNCTIONS (FIXED FOR set -e)
+# 2. LOGGING FUNCTIONS (SAFE WITH set -e)
 # ------------------------------------------------------
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
@@ -53,15 +53,22 @@ log "▶ Starting installer: $SCRIPT_NAME"
 info "Installing verified core packages…"
 
 # ------------------------------------------------------
-# 4. VALIDATION
+# 4. VALIDATION + SUDO WARM-UP
 # ------------------------------------------------------
 if [ "$EUID" -eq 0 ]; then
     warn "packages.sh is intended to run as USER (hybrid sudo mode)"
 fi
 
-# Prevent duplicate sudo prompts
-info "Performing sudo warm-up…"
-sudo -v || { error "sudo authentication failed"; exit 1; }
+# If we are *not* under install.sh, we must warm up sudo ourselves.
+# When running under install.sh, sudo has already been validated and
+# a keep-alive loop is running, so we intentionally skip this here.
+if [ -z "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
+    info "Performing sudo warm-up (standalone mode)…"
+    if ! sudo -v; then
+        error "sudo authentication failed"
+        exit 1
+    fi
+fi
 
 # ------------------------------------------------------
 # 5. VERIFIED PACKAGE LIST
