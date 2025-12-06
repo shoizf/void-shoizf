@@ -61,28 +61,8 @@ fi
 # 5. CORE LOGIC
 # ------------------------------------------------------
 
-# --- 5.1 Hyprland Repo Setup ---
-HYPR_REPO_CONF="/etc/xbps.d/hyprland-void.conf"
-HYPR_REPO_URL="repository=https://raw.githubusercontent.com/Makrennel/hyprland-void/repository-x86_64-glibc"
-
-if [ ! -f "$HYPR_REPO_CONF" ]; then
-  info "Adding Hyprland (Makrennel) repo → $HYPR_REPO_CONF"
-  echo "$HYPR_REPO_URL" | sudo tee "$HYPR_REPO_CONF" >/dev/null
-  ok "Hyprland repo added"
-else
-  info "Hyprland repo already exists"
-fi
-
-# --- 5.2 Force install Hyprlock and Hypridle ---
-info "Installing Hyprlock and Hypridle..."
-if sudo xbps-install -Sy hyprlock hypridle; then
-  ok "Hyprlock/Hypridle installed"
-else
-  error "Failed to install Hyprlock/Hypridle — check repo or network"
-fi
-
 # ------------------------------------------------------
-# 5.3 PACKAGES — MASTER PACKAGE LIST
+# 5.1 PACKAGES — MASTER PACKAGE LIST
 # ------------------------------------------------------
 
 PACKAGES=(
