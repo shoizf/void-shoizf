@@ -68,7 +68,7 @@ trap 'rm -rf "$WORKDIR"' EXIT
 info "Workdir: $WORKDIR"
 
 # ------------------------------------------------------
-# 5. DEPENDENCY CHECK
+# 5. DEPENDENCY CHECK (unchanged)
 # ------------------------------------------------------
 info "Checking required GRUB dependencies…"
 
@@ -80,13 +80,11 @@ check_dep() {
   fi
 }
 
-# executables required
 check_dep grub-install
 check_dep grub-mkconfig
 check_dep os-prober
 check_dep efibootmgr
 
-# packages whose executables may not expose commands
 [ -f /boot/efi ] || warn "/boot/efi not mounted (installer may fail)"
 
 if [ ${#MISSING[@]} -gt 0 ]; then
@@ -102,30 +100,34 @@ fi
 ok "All GRUB dependencies available"
 
 # ------------------------------------------------------
-# 6. THEME INSTALLATION
+# 6. THEME INSTALLATION (NEW + CORRECT + FUTURE-PROOF)
 # ------------------------------------------------------
 THEME_DIR="/boot/grub/themes/crossgrub"
-THEME_REPO="https://github.com/krypciak/crossgrub.git"
+THEME_URL="https://github.com/krypciak/crossgrub/releases/latest/download/crossgrub.tar.gz"
 
-info "Cloning GRUB theme…"
-if git clone --depth 1 "$THEME_REPO" "$WORKDIR/theme" >>"$LOG_FILE" 2>&1; then
-  rm -rf "$THEME_DIR" || true
-  mkdir -p "$THEME_DIR"
-  cp -r "$WORKDIR/theme/"* "$THEME_DIR/" >>"$LOG_FILE" 2>&1
-  ok "GRUB theme installed → $THEME_DIR"
+info "Installing GRUB theme from latest release…"
+
+rm -rf "$THEME_DIR"
+mkdir -p "$THEME_DIR"
+
+if wget -q "$THEME_URL" -O "$WORKDIR/theme.tar.gz" >>"$LOG_FILE" 2>&1; then
+  if tar -xf "$WORKDIR/theme.tar.gz" -C /boot/grub/themes >>"$LOG_FILE" 2>&1; then
+    ok "GRUB theme extracted → $THEME_DIR"
+  else
+    warn "Failed to extract theme tarball"
+  fi
 else
-  warn "Theme clone failed — skipping theme setup"
+  warn "Failed to download GRUB theme release tarball"
 fi
 
 # ------------------------------------------------------
-# 7. UPDATE /etc/default/grub
+# 7. UPDATE /etc/default/grub  (unchanged)
 # ------------------------------------------------------
 info "Updating /etc/default/grub settings…"
 
 GRUB_CFG="/etc/default/grub"
 THEME_TXT="$THEME_DIR/theme.txt"
 
-# Ensure GRUB_THEME
 if grep -q '^GRUB_THEME=' "$GRUB_CFG" 2>/dev/null; then
   sed -i "s|^GRUB_THEME=.*|GRUB_THEME=\"$THEME_TXT\"|" "$GRUB_CFG"
 else
@@ -133,7 +135,6 @@ else
 fi
 ok "GRUB_THEME set"
 
-# Ensure GRUB_DISABLE_OS_PROBER=false
 if grep -q '^GRUB_DISABLE_OS_PROBER=' "$GRUB_CFG"; then
   sed -i "s|^GRUB_DISABLE_OS_PROBER=.*|GRUB_DISABLE_OS_PROBER=false|" "$GRUB_CFG"
 else
@@ -142,7 +143,7 @@ fi
 ok "OS prober enabled"
 
 # ------------------------------------------------------
-# 8. grub-install (EFI)
+# 8. grub-install (unchanged)
 # ------------------------------------------------------
 info "Running grub-install…"
 if grub-install --target=x86_64-efi \
@@ -151,17 +152,17 @@ if grub-install --target=x86_64-efi \
   --recheck >>"$LOG_FILE" 2>&1; then
   ok "grub-install completed"
 else
-  warn "grub-install failed (see log) — maybe missing EFI mount?"
+  warn "grub-install failed (see log)"
 fi
 
 # ------------------------------------------------------
-# 9. Generate grub.cfg
+# 9. Generate grub.cfg (unchanged)
 # ------------------------------------------------------
 info "Running grub-mkconfig…"
 if grub-mkconfig -o /boot/grub/grub.cfg >>"$LOG_FILE" 2>&1; then
   ok "grub.cfg generated"
 else
-  warn "Failed to generate grub.cfg — see log"
+  warn "Failed to generate grub.cfg"
 fi
 
 log "Summary: theme=$THEME_DIR, grub.cfg=/boot/grub/grub.cfg"
