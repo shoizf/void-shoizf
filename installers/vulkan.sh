@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# installers/vulkan-intel.sh — Vulkan ICD verification for Intel/NVIDIA hybrid systems
+# installers/vulkan.sh — Vulkan ICD verification for Intel/NVIDIA hybrid systems
 # ROOT-SCRIPT — invoked by install.sh (no package installs performed)
 
 set -euo pipefail
@@ -48,10 +48,33 @@ info "Target user: $TARGET_USER"
 info "Target home: $TARGET_HOME"
 
 # ------------------------------------------------------
+# 1.5 VM DETECTION (SKIP IN VMs)
+# ------------------------------------------------------
+# vulkan checks are only meaningful on real hardware for this project
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=/dev/null
+if [ -f "$REPO_ROOT/utils/is_vm.sh" ]; then
+  # this sets IS_VM=true/false
+  # shellcheck source=/dev/null
+  source "$REPO_ROOT/utils/is_vm.sh"
+else
+  warn "utils/is_vm.sh missing — assuming bare metal"
+  IS_VM=false
+fi
+
+if [ "${IS_VM:-false}" = true ]; then
+  info "Virtual machine detected (IS_VM=true) — skipping Vulkan ICD checks."
+  pp "⚠ $SCRIPT_NAME: skipped (VM environment detected)"
+  log "✔ Finished $SCRIPT_NAME (skipped for VM)"
+  exit 0
+fi
+
+# ------------------------------------------------------
 # 2. VALIDATION
 # ------------------------------------------------------
 if [ "$EUID" -ne 0 ]; then
   error "This script must be executed as root (install.sh ROOT_SCRIPTS)"
+  pp "❌ vulkan.sh: need root"
   exit 1
 fi
 
@@ -60,22 +83,24 @@ info "NOTE: Vulkan packages are handled by packages.sh — this script performs 
 # ------------------------------------------------------
 # 3. DETECT ICDs
 # ------------------------------------------------------
-INTEL_ICD=$(ls /usr/share/vulkan/icd.d/*intel*.json 2>/dev/null || true)
-NVIDIA_ICD=$(ls /usr/share/vulkan/icd.d/*nvidia*.json 2>/dev/null || true)
+ICD_DIR="/usr/share/vulkan/icd.d"
+
+INTEL_ICD=$(ls "$ICD_DIR"/*intel*.json 2>/dev/null || true)
+NVIDIA_ICD=$(ls "$ICD_DIR"/*nvidia*.json 2>/dev/null || true)
 
 if [ -n "$INTEL_ICD" ]; then
   ok "Intel Vulkan ICD found: $(basename "$INTEL_ICD")"
 else
-  warn "Intel Vulkan ICD missing — install mesa-vulkan-intel if you need Intel Vulkan"
+  warn "Intel Vulkan ICD missing — install mesa-vulkan-intel if you need Intel Vulkan."
 fi
 
 if [ -n "$NVIDIA_ICD" ]; then
   ok "NVIDIA Vulkan ICD found: $(basename "$NVIDIA_ICD")"
 else
-  warn "NVIDIA Vulkan ICD missing — PRIME offload may fail"
+  warn "NVIDIA Vulkan ICD missing — PRIME offload on Vulkan will NOT work."
 fi
 
-# Hybrid-specific warnings
+# Hybrid-specific summary
 if [ -n "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
   info "Hybrid Vulkan stack detected (Intel primary + NVIDIA offload)."
 elif [ -n "$INTEL_ICD" ] && [ -z "$NVIDIA_ICD" ]; then
@@ -84,29 +109,31 @@ elif [ -z "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
   warn "Only NVIDIA ICD present — desktop compositors may break (missing Intel ICD!)."
 else
   error "No Vulkan ICDs found — Vulkan subsystem is NOT functional."
+  pp "❌ Vulkan ICDs missing — check mesa-vulkan-intel / NVIDIA driver setup."
+  exit 1
 fi
 
 # ------------------------------------------------------
 # 4. Test Vulkan via vulkaninfo
 # ------------------------------------------------------
 if command -v vulkaninfo >/dev/null 2>&1; then
-  info "Running vulkaninfo --summary..."
+  info "Running vulkaninfo --summary…"
   if vulkaninfo --summary >>"$LOG_FILE" 2>&1; then
     ok "vulkaninfo executed successfully"
   else
     warn "vulkaninfo reported issues — Vulkan configuration may be incomplete"
   fi
 else
-  warn "vulkaninfo not installed — install vulkan-tools for debugging"
+  warn "vulkaninfo not installed — install Vulkan-Tools for debugging."
 fi
 
 # ------------------------------------------------------
 # 5. Guidance (no environment tampering)
 # ------------------------------------------------------
-info "NOTE: VK_ICD_FILENAMES will NOT be set globally — this breaks hybrid setups."
-info "Use per-app overrides only if needed:"
-info "  VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/intel_icd.x86_64.json <app>"
-info "For NVIDIA offload:"
+info "NOTE: VK_ICD_FILENAMES will NOT be set globally — that breaks hybrid setups."
+info "Use per-app overrides only if needed, for example:"
+info "  VK_ICD_FILENAMES=$ICD_DIR/intel_icd.x86_64.json <app>"
+info "For NVIDIA offload (with proprietary driver & prime-run):"
 info "  prime-run <app>"
 
 # ------------------------------------------------------
