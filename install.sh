@@ -113,12 +113,12 @@ ROOT_SCRIPTS=(
   "nvidia"
   "networkman"
   "grub"
+  "audio"
 )
 
 USER_SCRIPTS=(
   "packages"
   "fonts"
-  "audio"
   "awww"
   "dev-tools"
   "niri"
