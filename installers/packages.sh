@@ -87,7 +87,7 @@ PACKAGES=(
 
   NetworkManager networkmanager-dmenu nm-tray network-manager-applet
 
-  niri xdg-utils wayland wayland-protocols
+  niri xdg-utils wayland wayland-devel wayland-protocols
   xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr
   xwayland-satellite polkit-kde-agent sddm elogind dbus-libs dbus-x11
 
