@@ -68,14 +68,38 @@ trap 'rm -rf "$WORKDIR"' EXIT
 info "Workdir: $WORKDIR"
 
 # ------------------------------------------------------
-# 5. INSTALL PACKAGES
+# 5. DEPENDENCY CHECK
 # ------------------------------------------------------
-info "Installing GRUB packages…"
-if xbps-install -Sy --yes intel-ucode grub-x86_64-efi os-prober >>"$LOG_FILE" 2>&1; then
-  ok "GRUB + dependencies installed"
-else
-  warn "xbps-install reported issues (see log)"
+info "Checking required GRUB dependencies…"
+
+MISSING=()
+
+check_dep() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    MISSING+=("$1")
+  fi
+}
+
+# executables required
+check_dep grub-install
+check_dep grub-mkconfig
+check_dep os-prober
+check_dep efibootmgr
+
+# packages whose executables may not expose commands
+[ -f /boot/efi ] || warn "/boot/efi not mounted (installer may fail)"
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  error "Missing required dependencies:"
+  for dep in "${MISSING[@]}"; do
+    error "  - $dep"
+  done
+  error "Install missing packages via packages.sh"
+  pp "❌ grub.sh: missing dependencies (see log)"
+  exit 1
 fi
+
+ok "All GRUB dependencies available"
 
 # ------------------------------------------------------
 # 6. THEME INSTALLATION

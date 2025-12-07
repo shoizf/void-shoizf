@@ -97,12 +97,16 @@ PACKAGES=(
   mesa-vulkan-intel mesa-vulkan-lavapipe
   Vulkan-Tools Vulkan-ValidationLayers Vulkan-Headers
 
+  intel-ucode
+
   kitty firefox dolphin Waybar walker mako pavucontrol wob swayimg qalculate-qt
 
   neovim tmux wl-clipboard mpc playerctl mpv scdoc
 
   cargo nodejs gtk+3 liblz4-devel desktop-file-utils
   cups cups-filters gammastep brightnessctl wlr-randr
+
+  grub-x86_64-efi efibootmgr os-prober
 )
 
 # ------------------------------------------------------
