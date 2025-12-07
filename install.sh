@@ -141,8 +141,8 @@ EXECUTION_ORDER=(
   "intel"
   "vulkan-intel"
   "nvidia"
-  "networkman"
   "grub"
+  "networkman"
 )
 
 # --- 7. EXECUTION ENGINE ---
