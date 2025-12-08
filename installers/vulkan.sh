@@ -30,17 +30,19 @@ fi
 
 QUIET_MODE=${QUIET_MODE:-true}
 
+# ------------------------------------------------------
 # Logging helpers
+# ------------------------------------------------------
 log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
   echo "$msg" >>"$LOG_FILE"
   [ "$QUIET_MODE" = false ] && echo "$msg"
 }
-info() { log "INFO  $*"; }
-warn() { log "WARN  $*"; }
+info()  { log "INFO  $*"; }
+warn()  { log "WARN  $*"; }
 error() { log "ERROR $*"; }
-ok() { log "OK    $*"; }
-pp() { echo -e "$*"; }
+ok()    { log "OK    $*"; }
+pp()    { echo -e "$*"; }
 
 pp "▶ $SCRIPT_NAME"
 log "▶ Starting $SCRIPT_NAME"
@@ -48,13 +50,11 @@ info "Target user: $TARGET_USER"
 info "Target home: $TARGET_HOME"
 
 # ------------------------------------------------------
-# 1.5 VM DETECTION (SKIP IN VMs)
+# 1.5 VM DETECTION — SKIP INSIDE VMs
 # ------------------------------------------------------
-# vulkan checks are only meaningful on real hardware for this project
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=/dev/null
+
 if [ -f "$REPO_ROOT/utils/is_vm.sh" ]; then
-  # this sets IS_VM=true/false
   # shellcheck source=/dev/null
   source "$REPO_ROOT/utils/is_vm.sh"
 else
@@ -63,7 +63,7 @@ else
 fi
 
 if [ "${IS_VM:-false}" = true ]; then
-  info "Virtual machine detected (IS_VM=true) — skipping Vulkan ICD checks."
+  info "Virtual machine detected — skipping Vulkan ICD checks"
   pp "⚠ $SCRIPT_NAME: skipped (VM environment detected)"
   log "✔ Finished $SCRIPT_NAME (skipped for VM)"
   exit 0
@@ -78,7 +78,7 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-info "NOTE: Vulkan packages are handled by packages.sh — this script performs checks only."
+info "NOTE: Vulkan packages are installed in packages.sh — this script performs checks only."
 
 # ------------------------------------------------------
 # 3. DETECT ICDs
@@ -97,16 +97,16 @@ fi
 if [ -n "$NVIDIA_ICD" ]; then
   ok "NVIDIA Vulkan ICD found: $(basename "$NVIDIA_ICD")"
 else
-  warn "NVIDIA Vulkan ICD missing — PRIME offload on Vulkan will NOT work."
+  warn "NVIDIA Vulkan ICD missing — PRIME Vulkan offload will NOT work."
 fi
 
-# Hybrid-specific summary
+# Summary
 if [ -n "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
-  info "Hybrid Vulkan stack detected (Intel primary + NVIDIA offload)."
+  info "Hybrid Vulkan stack detected (Intel primary + NVIDIA offload)"
 elif [ -n "$INTEL_ICD" ] && [ -z "$NVIDIA_ICD" ]; then
   warn "Only Intel ICD present — NVIDIA offload will NOT expose Vulkan."
 elif [ -z "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
-  warn "Only NVIDIA ICD present — desktop compositors may break (missing Intel ICD!)."
+  warn "Only NVIDIA ICD present — desktop compositors may break (missing Intel ICD!)"
 else
   error "No Vulkan ICDs found — Vulkan subsystem is NOT functional."
   pp "❌ Vulkan ICDs missing — check mesa-vulkan-intel / NVIDIA driver setup."
@@ -117,7 +117,7 @@ fi
 # 4. Test Vulkan via vulkaninfo
 # ------------------------------------------------------
 if command -v vulkaninfo >/dev/null 2>&1; then
-  info "Running vulkaninfo --summary…"
+  info "Running vulkaninfo --summary..."
   if vulkaninfo --summary >>"$LOG_FILE" 2>&1; then
     ok "vulkaninfo executed successfully"
   else
@@ -128,12 +128,12 @@ else
 fi
 
 # ------------------------------------------------------
-# 5. Guidance (no environment tampering)
+# 5. Guidance
 # ------------------------------------------------------
-info "NOTE: VK_ICD_FILENAMES will NOT be set globally — that breaks hybrid setups."
-info "Use per-app overrides only if needed, for example:"
+info "NOTE: VK_ICD_FILENAMES will NOT be set globally (breaks hybrid setups)"
+info "Use per-app overrides only if needed:"
 info "  VK_ICD_FILENAMES=$ICD_DIR/intel_icd.x86_64.json <app>"
-info "For NVIDIA offload (with proprietary driver & prime-run):"
+info "For NVIDIA offload:"
 info "  prime-run <app>"
 
 # ------------------------------------------------------
