@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# installers/vulkan.sh — Vulkan ICD verification for Intel/NVIDIA hybrid systems
-# ROOT-SCRIPT — invoked by install.sh (no package installs performed)
+# installers/vulkan.sh — Vulkan ICD verification for Intel/NVIDIA systems
+# ROOT-SCRIPT — diagnostics only (no package installs performed)
 
-# We intentionally DO NOT use -e here: this is a diagnostics script and
-# should not kill the whole install because some check command returns != 0
+# NOTE: We do NOT use `set -e` here.
+# Vulkan is optional for many users, and failed checks should NOT kill install.
 set -uo pipefail
 
 # ------------------------------------------------------
@@ -12,7 +12,6 @@ set -uo pipefail
 SCRIPT_NAME="$(basename "$0" .sh)"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-# Determine user for logs
 if [ -n "${SUDO_USER:-}" ]; then
   TARGET_USER="$SUDO_USER"
   TARGET_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
@@ -37,12 +36,13 @@ QUIET_MODE=${QUIET_MODE:-true}
 # ------------------------------------------------------
 log() {
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" >>"$LOG_FILE"
+  echo "$msg" >> "$LOG_FILE"
   [ "$QUIET_MODE" = false ] && echo "$msg"
 }
+
 info()  { log "INFO  $*"; }
 warn()  { log "WARN  $*"; }
-error() { log "ERROR $*"; exit 1; }   # real fatal
+error() { log "ERROR $*"; }
 ok()    { log "OK    $*"; }
 pp()    { echo -e "$*"; }
 
@@ -52,7 +52,7 @@ info "Target user: $TARGET_USER"
 info "Target home: $TARGET_HOME"
 
 # ------------------------------------------------------
-# 1.5 VM DETECTION — SKIP INSIDE VMs
+# 1.5 VM DETECTION — SKIP IF VM
 # ------------------------------------------------------
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -65,78 +65,76 @@ else
 fi
 
 if [ "${IS_VM:-false}" = true ]; then
-  info "Virtual machine detected — skipping Vulkan ICD checks"
-  pp "⚠ $SCRIPT_NAME: skipped (VM environment detected)"
+  info "VM detected — skipping Vulkan checks"
+  pp "⚠ $SCRIPT_NAME skipped (running inside VM)"
   log "✔ Finished $SCRIPT_NAME (skipped for VM)"
   exit 0
 fi
 
 # ------------------------------------------------------
-# 2. VALIDATION
+# 2. ROOT VALIDATION
 # ------------------------------------------------------
 if [ "$EUID" -ne 0 ]; then
-  error "This script must be executed as root (install.sh ROOT_SCRIPTS)"
+  pp "❌ vulkan.sh: needs root"
+  error "Script must be executed as root"
+  exit 1
 fi
 
-info "NOTE: Vulkan packages are installed in packages.sh — this script performs checks only."
+info "NOTE: Vulkan packages are installed in packages.sh — this script only checks."
 
 # ------------------------------------------------------
-# 3. DETECT ICDs
+# 3. ICD DETECTION
 # ------------------------------------------------------
 ICD_DIR="/usr/share/vulkan/icd.d"
 
 if [ ! -d "$ICD_DIR" ]; then
-  error "ICD directory $ICD_DIR does not exist — no Vulkan ICDs installed at all."
+  warn "ICD directory is missing — no Vulkan support installed"
+  pp "⚠ Vulkan ICD directory not found — Vulkan unavailable"
+  log "✔ Finished $SCRIPT_NAME (no ICD directory)"
+  exit 0
 fi
 
 INTEL_ICD=$(ls "$ICD_DIR"/*intel*.json 2>/dev/null || true)
 NVIDIA_ICD=$(ls "$ICD_DIR"/*nvidia*.json 2>/dev/null || true)
 
+# Intel ICD
 if [ -n "$INTEL_ICD" ]; then
-  ok "Intel Vulkan ICD found: $(basename "$INTEL_ICD")"
+  ok "Intel ICD: $(basename "$INTEL_ICD")"
 else
-  warn "Intel Vulkan ICD missing — install mesa-vulkan-intel if you need Intel Vulkan."
+  warn "Intel Vulkan ICD missing (mesa-vulkan-intel required)"
 fi
 
+# NVIDIA ICD
 if [ -n "$NVIDIA_ICD" ]; then
-  ok "NVIDIA Vulkan ICD found: $(basename "$NVIDIA_ICD")"
+  ok "NVIDIA ICD: $(basename "$NVIDIA_ICD")"
 else
-  warn "NVIDIA Vulkan ICD missing — PRIME Vulkan offload will NOT work."
+  warn "NVIDIA Vulkan ICD missing (offload Vulkan will NOT work)"
 fi
 
-# Summary
+# Summary condition
 if [ -n "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
   info "Hybrid Vulkan stack detected (Intel primary + NVIDIA offload)"
-elif [ -n "$INTEL_ICD" ] && [ -z "$NVIDIA_ICD" ]; then
-  warn "Only Intel ICD present — NVIDIA offload will NOT expose Vulkan."
-elif [ -z "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
-  warn "Only NVIDIA ICD present — desktop compositors may break (missing Intel ICD!)"
+elif [ -n "$INTEL_ICD" ]; then
+  warn "Only Intel Vulkan ICD found — no NVIDIA Vulkan offload"
+elif [ -n "$NVIDIA_ICD" ]; then
+  warn "Only NVIDIA Vulkan ICD found — desktop compositors may break"
 else
-  error "No Vulkan ICDs found — Vulkan subsystem is NOT functional."
+  warn "No Vulkan ICDs found — Vulkan unavailable"
 fi
 
 # ------------------------------------------------------
-# 4. Test Vulkan via vulkaninfo
+# 4. OPTIONAL: vulkaninfo check
 # ------------------------------------------------------
 if command -v vulkaninfo >/dev/null 2>&1; then
   info "Running vulkaninfo --summary..."
-  if vulkaninfo --summary >>"$LOG_FILE" 2>&1; then
+  if vulkaninfo --summary >> "$LOG_FILE" 2>&1; then
     ok "vulkaninfo executed successfully"
   else
-    warn "vulkaninfo reported issues — Vulkan configuration may be incomplete"
+    warn "vulkaninfo reports issues — Vulkan may be incomplete"
   fi
 else
-  warn "vulkaninfo not installed — install Vulkan-Tools for debugging."
+  warn "vulkaninfo not installed (package: vulkan-tools)"
 fi
-
-# ------------------------------------------------------
-# 5. Guidance
-# ------------------------------------------------------
-info "NOTE: VK_ICD_FILENAMES will NOT be set globally (breaks hybrid setups)"
-info "Use per-app overrides only if needed:"
-info "  VK_ICD_FILENAMES=$ICD_DIR/intel_icd.x86_64.json <app>"
-info "For NVIDIA offload:"
-info "  prime-run <app>"
 
 # ------------------------------------------------------
 # 6. END
