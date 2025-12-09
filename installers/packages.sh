@@ -90,6 +90,7 @@ PACKAGES=(
   niri xdg-utils wayland wayland-devel wayland-protocols
   xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr
   xwayland-satellite polkit-kde-agent sddm elogind dbus-libs dbus-x11
+  qt6-svg qt6-virtualkeyboard qt6-multimedia
 
   nvidia nvidia-dkms nvidia-firmware nvidia-libs nvidia-gtklibs
   nvidia-vaapi-driver dkms libglvnd vulkan-loader nvidia-libs-32bit
