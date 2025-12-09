@@ -1,39 +1,30 @@
 #!/usr/bin/env bash
-# selector.sh — theme selector for SDDM Astronaut theme
-# USER-SCRIPT (run before the root SDDM installer)
-#
-# ------------------------------------------------------
-#  void-shoizf Script Version
-# ------------------------------------------------------
-#  Name: selector.sh
-#  Version: 1.0.0
-#  Updated: 2025-12-10
-#  Purpose: Ask user which SDDM theme to use. Writes result to temp directory.
-# ------------------------------------------------------
+# sddm_theme_selector.sh — USER script
+# VERSION: 1.0.0
+# Handles SDDM theme choice BEFORE root installer applies it.
 
 set -euo pipefail
 
-SCRIPT_NAME="selector"
+SCRIPT_NAME="sddm_theme_selector"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-# install.sh will export this
-TMP_STAGING="${TMP_STAGING:-$HOME/.cache/void-shoizf-selector}"
+TARGET_USER="${TARGET_USER:-$USER}"
+TARGET_HOME="${TARGET_HOME:-$HOME}"
+LOG_FILE="${VOID_SHOIZF_MASTER_LOG:-/tmp/void_shoizf_master.log}"
 
-mkdir -p "$TMP_STAGING"
+# Temporary dir for storing user choice
+TMP_DIR="/tmp/void-shoizf-sddm"
+mkdir -p "$TMP_DIR"
+SELECT_FILE="$TMP_DIR/theme_choice.txt"
 
-LOG_FILE="$TMP_STAGING/${SCRIPT_NAME}-${TIMESTAMP}.log"
-QUIET_MODE=${QUIET_MODE:-true}
-
-log() { 
-    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-    echo "$msg" >>"$LOG_FILE"
-    [ "$QUIET_MODE" = false ] && echo "$msg"
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*" >>"$LOG_FILE"
 }
 
-pp() { echo -e "$*"; }
+log "▶ Starting SDDM theme selector (User mode)"
 
 # ------------------------------------------------------
-# THEMES (alphabetical, numbered automatically)
+# LIST OF THEMES (alphabetically sorted)
 # ------------------------------------------------------
 THEMES=(
     "astronaut"
@@ -48,73 +39,112 @@ THEMES=(
     "purple_leaves"
 )
 
-DEFAULT="jake_the_dog"
+DEFAULT_THEME="jake_the_dog"
 
 # ------------------------------------------------------
-# UI + countdown
+# PRINT UI
 # ------------------------------------------------------
-
-pp "▶ SDDM Theme Selection (default: $DEFAULT)"
-pp ""
-pp "Available themes:"
+clear
+echo "▶ SDDM Theme Selection (default: ${DEFAULT_THEME})"
+echo ""
+echo "Available themes:"
 
 i=1
 for t in "${THEMES[@]}"; do
-    pp "  $i) $t"
+    echo "  ${i}) ${t}"
     i=$((i+1))
 done
 
-pp ""
-pp "Press [number + Enter] to choose theme."
-pp "Timer: 15 seconds.  (p = pause, r = resume)"
-pp ""
+echo ""
+echo "Press [number + Enter] to choose a theme."
+echo "Timer: 15 seconds.   (p = pause, r = resume, ENTER = select default)"
+echo ""
 
-chosen=""
-seconds=15
-paused=false
+# ------------------------------------------------------
+# INPUT + COUNTDOWN ENGINE (revised)
+# ------------------------------------------------------
 
-while [ "$seconds" -gt 0 ]; do
-    if ! $paused; then
-        pp "Time remaining: ${seconds}s"
-    fi
+CHOICE=""
+SECONDS_LEFT=15
+PAUSED=false
 
-    read -t 1 -p "> " input || true
+print_timer() {
+    echo -ne "\rTime remaining: ${SECONDS_LEFT}s "
+}
 
-    if [ -n "${input:-}" ]; then
-        case "$input" in
-            p|P)
-                paused=true
-                pp "[Paused]"
+while true; do
+    print_timer
+
+    # Read a full line (supports multi-digit); timeout 1s
+    if read -t 1 -r key; then
+        case "$key" in
+            "" )
+                # ENTER = default
+                CHOICE=""
+                break
                 ;;
-            r|R)
-                paused=false
-                pp "[Resumed]"
-                ;;
-            ''|*[!0-9]*)
-                pp "Invalid entry."
-                ;;
-            *)
-                idx=$((input))
-                if [ "$idx" -ge 1 ] && [ "$idx" -le "${#THEMES[@]}" ]; then
-                    chosen="${THEMES[$((idx-1))]}"
+
+            [0-9]* )
+                # Multi-digit ok
+                if [[ "$key" =~ ^[0-9]+$ ]]; then
+                    CHOICE="$key"
                     break
-                else
-                    pp "Invalid selection."
                 fi
+                ;;
+
+            p|P )
+                PAUSED=true
+                ;;
+
+            r|R )
+                PAUSED=false
+                ;;
+
+            * )
+                echo -ne "\rInvalid input.               "
                 ;;
         esac
     fi
 
-    if ! $paused; then
-        seconds=$((seconds - 1))
+    # Countdown logic
+    if [ "$PAUSED" = false ]; then
+        SECONDS_LEFT=$((SECONDS_LEFT - 1))
+    fi
+
+    # Auto default
+    if [ "$SECONDS_LEFT" -le 0 ]; then
+        CHOICE=""
+        break
     fi
 done
 
-[ -z "$chosen" ] && chosen="$DEFAULT"
+echo ""
 
-echo "$chosen" > "$TMP_STAGING/theme"
+# ------------------------------------------------------
+# RESOLVE CHOICE
+# ------------------------------------------------------
 
-log "User selected: $chosen"
-pp "Selected theme: $chosen"
+if [ -z "$CHOICE" ]; then
+    FINAL_THEME="$DEFAULT_THEME"
+else
+    if ! [[ "$CHOICE" =~ ^[0-9]+$ ]] || [ "$CHOICE" -lt 1 ] || [ "$CHOICE" -gt "${#THEMES[@]}" ]; then
+        echo "Invalid choice. Using default."
+        FINAL_THEME="$DEFAULT_THEME"
+    else
+        FINAL_THEME="${THEMES[$((CHOICE - 1))]}"
+    fi
+fi
 
+echo "✔ Theme selected: ${FINAL_THEME}"
+log "Selected theme: ${FINAL_THEME}"
+
+# ------------------------------------------------------
+# WRITE RESULT TO TEMP FILE
+# ------------------------------------------------------
+
+echo "$FINAL_THEME" > "$SELECT_FILE"
+chmod 600 "$SELECT_FILE"
+log "Theme written to: $SELECT_FILE"
+
+log "✔ Selector complete."
 exit 0

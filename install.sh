@@ -1,55 +1,70 @@
 #!/usr/bin/env bash
 # install.sh — Master Orchestrator (User-Driven Mode)
-# Version: 1.1.0
-# Updated: 2025-12-10
-#
-# Runs as USER. Handles environment, logging, VM detection, execution order
-# and delegates logs to ROOT and USER installers through VOID_SHOIZF_MASTER_LOG.
-#
-# All installers live inside ./installers and follow template rules.
+# USER-SCRIPT (run as normal user; uses sudo internally)
+
+# ------------------------------------------------------
+#  void-shoizf Script Version
+# ------------------------------------------------------
+#  Name: install.sh
+#  Version: 1.1.0
+#  Updated: 2025-12-09
+#  Purpose: Drive the full Void + Niri setup, handing off
+#           logging to child installers and keeping a
+#           single master log per run.
+# ------------------------------------------------------
 
 set -euo pipefail
 
 # ------------------------------------------------------
-# 1. USER VALIDATION (User-Driven)
+# 1. USER VALIDATION (MUST be non-root)
 # ------------------------------------------------------
 if [ "$EUID" -eq 0 ]; then
   cat <<EOF >&2
-❌ ERROR: This script must NOT be run as root.
-👉 Usage: ./install.sh   (run as your normal user)
+❌ ERROR: This script must NOT be run as ROOT.
+
+👉 Usage:
+   ./install.sh    # run as your normal user
 EOF
   exit 1
 fi
 
-echo "🔒 Requesting sudo privileges for Root-Level installers..."
+# ------------------------------------------------------
+# 2. PREPARE SUDO (cache credentials & keep alive)
+# ------------------------------------------------------
+echo "🔒 Requesting sudo privileges for root-level installers..."
 if ! sudo -v; then
   echo "❌ Sudo authentication failed." >&2
   exit 1
 fi
 
-# Keep sudo alive during execution
+# Keep sudo timestamp alive in the background
+# (best-effort; errors ignored to avoid noisy output)
 while true; do
-  sudo -n true
+  sudo -n true 2>/dev/null || true
   sleep 60
-  kill -0 "$$" || exit
-done 2>/dev/null &
+  kill -0 "$$" 2>/dev/null || exit
+done &
 
 # ------------------------------------------------------
-# 2. TARGET USER + LOGGING SETUP
+# 3. TARGET USER CONTEXT
 # ------------------------------------------------------
 TARGET_USER="$USER"
 TARGET_HOME="$HOME"
 TARGET_GROUP="$(id -gn)"
 
-echo "🚀 Initializing install for: $TARGET_USER ($TARGET_HOME)"
+echo "🚀 Initializing User-Driven Installation for: $TARGET_USER ($TARGET_HOME)"
 
+# ------------------------------------------------------
+# 4. MASTER LOGGING SETUP
+# ------------------------------------------------------
 LOG_DIR="$TARGET_HOME/.local/log/void-shoizf"
 mkdir -p "$LOG_DIR"
 
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
-MASTER_NAME="void-shoizf-master"
-MASTER_LOG_FILE="$LOG_DIR/${MASTER_NAME}-${TIMESTAMP}.log"
+SCRIPT_NAME="void-shoizf-master"
+MASTER_LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
 
+# Create the master log as the user
 : >"$MASTER_LOG_FILE"
 
 export VOID_SHOIZF_MASTER_LOG="$MASTER_LOG_FILE"
@@ -61,10 +76,10 @@ log() {
   echo "$msg" | tee -a "$MASTER_LOG_FILE"
 }
 
-log "▶ Starting Master Installation"
+log "▶ Starting User-Driven Install for $TARGET_USER"
 
 # ------------------------------------------------------
-# 3. PATHS & VM CHECK
+# 5. PATHS & VM DETECTION
 # ------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UTILS_DIR="$SCRIPT_DIR/utils"
@@ -73,45 +88,52 @@ INSTALLERS_DIR="$SCRIPT_DIR/installers"
 IS_VM=false
 if [ -f "$UTILS_DIR/is_vm.sh" ]; then
   # shellcheck disable=SC1090
-  source "$UTILS_DIR/is_vm.sh" || true
-  : "${IS_VM:=false}"
-  log "INFO VM detection: IS_VM=$IS_VM"
+  if source "$UTILS_DIR/is_vm.sh"; then
+    : "${IS_VM:=false}"
+  else
+    IS_VM=false
+  fi
+  log "INFO VM detection: IS_VM=${IS_VM}"
+else
+  log "WARN utils/is_vm.sh missing — assuming bare metal"
 fi
 
 # ------------------------------------------------------
-# 4. CORE SERVICES (DBUS & RTKIT)
+# 6. CORE SYSTEM SERVICES (Tier 0)
 # ------------------------------------------------------
-log "Configuring core services..."
+log "Configuring core services (dbus/rtkit)..."
 
 SV_DIR="/etc/sv"
 RUNIT_DIR="/etc/runit/runsvdir/default"
 
-# Enable dbus
+# dbus activation
 if [ -d "$SV_DIR/dbus" ]; then
   if [ ! -L "$RUNIT_DIR/dbus" ]; then
     sudo ln -s "$SV_DIR/dbus" "$RUNIT_DIR/dbus"
-    log "OK Enabled: dbus"
+    log "OK Enabled core service: dbus"
   else
-    log "INFO dbus already active"
+    log "INFO Core service dbus already active"
   fi
 else
-  log "WARN dbus service not present yet (likely installed later)"
+  log "WARN dbus service directory not found under $SV_DIR"
 fi
 
-# Enable rtkit (PipeWire realtime)
+# rtkit for PipeWire realtime audio
 if [ -d "$SV_DIR/rtkit" ]; then
   if [ ! -L "$RUNIT_DIR/rtkit" ]; then
-    sudo ln -sf "$SV_DIR/rtkit" "$RUNIT_DIR/rtkit"
-    log "OK Enabled: rtkit"
+    sudo ln -s "$SV_DIR/rtkit" "$RUNIT_DIR/rtkit"
+    log "OK Enabled core service: rtkit"
+  else
+    log "INFO Core service rtkit already active"
   fi
 else
-  log "WARN rtkit service missing"
+  log "WARN rtkit service directory not found under $SV_DIR"
 fi
 
 log "✅ Core services configured."
 
 # ------------------------------------------------------
-# 5. SCRIPT GROUP DEFINITIONS
+# 7. INSTALLER DEFINITIONS
 # ------------------------------------------------------
 ROOT_SCRIPTS=(
   "repos"
@@ -156,52 +178,60 @@ EXECUTION_ORDER=(
   "networkman"
 )
 
+# helper: check if script is ROOT-mode
+is_root_script() {
+  local name="$1"
+  for r in "${ROOT_SCRIPTS[@]}"; do
+    if [ "$r" = "$name" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # ------------------------------------------------------
-# 6. EXECUTION LOOP
+# 8. EXECUTION ENGINE
 # ------------------------------------------------------
 for script_name in "${EXECUTION_ORDER[@]}"; do
   SCRIPT_PATH="$INSTALLERS_DIR/${script_name}.sh"
 
   if [ ! -f "$SCRIPT_PATH" ]; then
-    log "WARN Missing installer: $SCRIPT_PATH — skipping"
+    log "WARN Missing installer: $SCRIPT_PATH — skipping."
     continue
   fi
 
-  # VM Skip Logic
-  if [[ "$IS_VM" == true && "$script_name" =~ ^(intel|nvidia|vulkan)$ ]]; then
-    log "SKIP ${script_name}.sh — skipped inside VM"
+  # VM skip logic (GPU / networkman checks)
+  if [[ "$IS_VM" == true && "$script_name" =~ ^(intel|vulkan|vulkan-intel|nvidia|networkman)$ ]]; then
+    log "SKIP ${script_name}.sh — skipped for VM environment."
     continue
   fi
 
-  # Determine mode (root/user)
   MODE="USER"
-  for r in "${ROOT_SCRIPTS[@]}"; do
-    if [[ "$script_name" == "$r" ]]; then
-      MODE="ROOT"
-      break
-    fi
-  done
+  if is_root_script "$script_name"; then
+    MODE="ROOT"
+  fi
 
   log "▶ Running ${script_name}.sh [Mode: $MODE]"
 
-  if [[ "$MODE" == "ROOT" ]]; then
+  if [ "$MODE" = "ROOT" ]; then
     if sudo -E env \
-      "VOID_SHOIZF_MASTER_LOG=$VOID_SHOIZF_MASTER_LOG" \
       "TARGET_USER=$TARGET_USER" \
       "TARGET_HOME=$TARGET_HOME" \
-      bash "$SCRIPT_PATH" 2>&1 | tee -a "$MASTER_LOG_FILE"; then
+      "VOID_SHOIZF_MASTER_LOG=$VOID_SHOIZF_MASTER_LOG" \
+      bash "$SCRIPT_PATH" 2>&1 | tee -a "$MASTER_LOG_FILE"
+    then
       log "OK ${script_name}.sh completed"
     else
       log "ERROR ${script_name}.sh FAILED (root mode)"
     fi
-
   else
     if sudo -u "$TARGET_USER" -H env \
       "HOME=$TARGET_HOME" \
       "TARGET_USER=$TARGET_USER" \
       "TARGET_HOME=$TARGET_HOME" \
       "VOID_SHOIZF_MASTER_LOG=$VOID_SHOIZF_MASTER_LOG" \
-      bash "$SCRIPT_PATH" 2>&1 | tee -a "$MASTER_LOG_FILE"; then
+      bash "$SCRIPT_PATH" 2>&1 | tee -a "$MASTER_LOG_FILE"
+    then
       log "OK ${script_name}.sh completed"
     else
       log "ERROR ${script_name}.sh FAILED (user mode)"
@@ -209,5 +239,12 @@ for script_name in "${EXECUTION_ORDER[@]}"; do
   fi
 done
 
-log "🎉 Installation Sequence Complete."
+# ------------------------------------------------------
+# 9. END
+# ------------------------------------------------------
+log "✅ Installation sequence complete."
+echo
+echo "Master log written to:"
+echo "  $MASTER_LOG_FILE"
+echo
 exit 0
