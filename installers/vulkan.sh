@@ -42,7 +42,7 @@ log() {
 }
 info()  { log "INFO  $*"; }
 warn()  { log "WARN  $*"; }
-error() { log "ERROR $*"; exit 1; }   # <- real fatal
+error() { log "ERROR $*"; exit 1; }   # real fatal
 ok()    { log "OK    $*"; }
 pp()    { echo -e "$*"; }
 
@@ -76,7 +76,6 @@ fi
 # ------------------------------------------------------
 if [ "$EUID" -ne 0 ]; then
   error "This script must be executed as root (install.sh ROOT_SCRIPTS)"
-  # error() already exit 1
 fi
 
 info "NOTE: Vulkan packages are installed in packages.sh — this script performs checks only."
