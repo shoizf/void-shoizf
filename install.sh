@@ -109,7 +109,7 @@ ROOT_SCRIPTS=(
   "hyprlock"
   "sddm_astronaut"
   "intel"
-  "vulkan-intel"
+  "vulkan"
   "nvidia"
   "networkman"
   "grub"
@@ -139,8 +139,8 @@ EXECUTION_ORDER=(
   "mako"
   "sddm_astronaut"
   "intel"
-  "vulkan-intel"
   "nvidia"
+  "vulkan"
   "grub"
   "networkman"
 )
