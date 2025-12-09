@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# installers/nvidia.sh — Configure NVIDIA PRIME offload (Intel primary + NVIDIA secondary)
-# ROOT-SCRIPT — must be run as root via install.sh
+# installers/nvidia.sh — Configure NVIDIA PRIME Render Offload (Intel primary + NVIDIA secondary)
+# ROOT-SCRIPT — must be run as root via install.sh only
 
 set -euo pipefail
 
@@ -11,39 +11,41 @@ set -euo pipefail
 SCRIPT_NAME="$(basename "$0" .sh)"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-if [ -n "${SUDO_USER:-}" ]; then
-  TARGET_USER="$SUDO_USER"
-  TARGET_USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+# Determine correct user's home for logging (same logic as other root scripts)
+if [ -n "${TARGET_HOME:-}" ]; then
+    TARGET_USER_HOME="$TARGET_HOME"
+elif [ -n "${SUDO_USER:-}" ]; then
+    TARGET_USER_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
 else
-  TARGET_USER="$(whoami)"
-  TARGET_USER_HOME="$HOME"
+    TARGET_USER_HOME="/root"
 fi
 
-LOG_DIR="$TARGET_USER_HOME/.local/log/void-shoizf"
-mkdir -p "$LOG_DIR"
-
+# Logging: master mode or standalone fallback
 if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
-  LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+    LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
+    MASTER_MODE=true
 else
-  LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+    LOG_DIR="$TARGET_USER_HOME/.local/log/void-shoizf"
+    mkdir -p "$LOG_DIR"
+    LOG_FILE="$LOG_DIR/${SCRIPT_NAME}-${TIMESTAMP}.log"
+    MASTER_MODE=false
 fi
 
 QUIET_MODE=${QUIET_MODE:-true}
 
 log() {
-  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-  echo "$msg" >>"$LOG_FILE"
-  [ "$QUIET_MODE" = false ] && echo "$msg"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
+    echo "$msg" >>"$LOG_FILE"
+    if [ "$QUIET_MODE" = false ] && [ "$MASTER_MODE" = false ]; then
+        echo "$msg"
+    fi
 }
 
-info() { log "INFO  $*"; }
-warn() { log "WARN  $*"; }
-error() {
-  log "ERROR $*"
-  exit 1
-}
-ok() { log "OK    $*"; }
-pp() { echo -e "$*"; }
+info()  { log "INFO  $*"; }
+warn()  { log "WARN  $*"; }
+error() { log "ERROR $*"; exit 1; }
+ok()    { log "OK    $*"; }
+pp()    { echo -e "$*"; }
 
 pp "▶ $SCRIPT_NAME"
 log "▶ Starting NVIDIA PRIME offload configuration"
@@ -54,41 +56,52 @@ log "▶ Starting NVIDIA PRIME offload configuration"
 
 [ "$EUID" -ne 0 ] && error "This script must run as root"
 
-command -v lspci >/dev/null || warn "lspci not found — install pciutils for GPU detection"
-command -v xbps-query >/dev/null || warn "xbps-query not found — cannot verify installed packages"
-
 # ------------------------------------------------------
-# 3. DETECT GPUs (NVIDIA + INTEL)
+# 3. VM DETECTION — ALWAYS SKIP IN VM
 # ------------------------------------------------------
 
-info "Detecting GPUs via lspci..."
+# install.sh already exports IS_VM when sourcing utils/is_vm.sh
+if [ "${IS_VM:-false}" = true ]; then
+    warn "VM detected — skipping NVIDIA configuration entirely"
+    log  "SKIP: NVIDIA script disabled inside virtual machines"
+    pp   "⚠ Skipping NVIDIA config (VM detected)"
+    exit 0
+fi
+
+# ------------------------------------------------------
+# 4. GPU DETECTION
+# ------------------------------------------------------
+
+command -v lspci >/dev/null 2>&1 || warn "lspci not available — pciutils missing"
+command -v xbps-query >/dev/null 2>&1 || warn "xbps-query missing — cannot verify driver packages"
+
+info "Detecting GPUs…"
 
 NVIDIA_ADDR="$(lspci -nn | grep -i 'nvidia' | awk '{print $1}' | head -n1 || true)"
 INTEL_ADDR="$(lspci -nn | grep -i 'intel' | grep -E 'VGA|3D' | awk '{print $1}' | head -n1 || true)"
 
 if [ -z "$NVIDIA_ADDR" ]; then
-  warn "No NVIDIA GPU detected — skipping NVIDIA configuration"
-  exit 0
+    warn "No NVIDIA GPU detected — skipping"
+    exit 0
 fi
 
-info "NVIDIA GPU PCI address: $NVIDIA_ADDR"
-[ -n "$INTEL_ADDR" ] && info "Intel GPU PCI address:   $INTEL_ADDR"
+info "NVIDIA GPU: $NVIDIA_ADDR"
+[ -n "$INTEL_ADDR" ] && info "Intel GPU:   $INTEL_ADDR"
 
 pci_to_busid() {
-  local addr="$1"
-  IFS=':.' read -r bus dev func <<<"$addr"
-  printf 'PCI:%d:%d:%d' $((0x$bus)) $((0x$dev)) $((0x$func))
+    IFS=':.' read -r bus dev func <<<"$1"
+    printf 'PCI:%d:%d:%d' $((0x$bus)) $((0x$dev)) $((0x$func))
 }
 
 NVIDIA_BUSID="$(pci_to_busid "$NVIDIA_ADDR")"
-info "NVIDIA BusID resolved to: $NVIDIA_BUSID"
+info "NVIDIA BusID resolved to $NVIDIA_BUSID"
 
 # ------------------------------------------------------
-# 4. BLACKLIST NOUVEAU
+# 5. BLACKLIST NOUVEAU (required by proprietary driver)
 # ------------------------------------------------------
 
 BLACKLIST_FILE="/etc/modprobe.d/blacklist-nouveau.conf"
-info "Applying nouveau blacklist → $BLACKLIST_FILE"
+info "Blacklisting nouveau → $BLACKLIST_FILE"
 
 cat >"$BLACKLIST_FILE" <<'EOF'
 # Managed by void-shoizf
@@ -100,27 +113,27 @@ chmod 644 "$BLACKLIST_FILE"
 ok "Nouveau blacklisted"
 
 # ------------------------------------------------------
-# 5. XORG PRIME OFFLOAD CONFIG
+# 6. XORG PRIME OFFLOAD CONFIG
 # ------------------------------------------------------
 
 XORG_DIR="/etc/X11/xorg.conf.d"
 XORG_FILE="$XORG_DIR/10-nvidia-prime.conf"
-mkdir -p "$XORG_DIR"
 
-info "Writing PRIME offload Xorg config → $XORG_FILE"
+mkdir -p "$XORG_DIR"
+info "Writing PRIME offload config → $XORG_FILE"
 
 cat >"$XORG_FILE" <<EOF
-# Managed by void-shoizf — PRIME offload config
+# Managed by void-shoizf — PRIME Render Offload
 Section "Device"
-    Identifier  "IntelGPU"
-    Driver      "modesetting"
+    Identifier "IntelGPU"
+    Driver     "modesetting"
 EndSection
 
 Section "Device"
-    Identifier  "NvidiaGPU"
-    Driver      "nvidia"
-    BusID       "$NVIDIA_BUSID"
-    Option      "AllowEmptyInitialConfiguration" "true"
+    Identifier "NvidiaGPU"
+    Driver     "nvidia"
+    BusID      "$NVIDIA_BUSID"
+    Option     "AllowEmptyInitialConfiguration" "true"
 EndSection
 EOF
 
@@ -128,7 +141,7 @@ chmod 644 "$XORG_FILE"
 ok "Xorg PRIME config installed"
 
 # ------------------------------------------------------
-# 6. INSTALL prime-run WRAPPER
+# 7. PRIME-RUN WRAPPER (Void Linux recommended)
 # ------------------------------------------------------
 
 PRIME_RUN="/usr/local/bin/prime-run"
@@ -136,7 +149,7 @@ info "Installing prime-run wrapper → $PRIME_RUN"
 
 cat >"$PRIME_RUN" <<'EOF'
 #!/usr/bin/env bash
-# prime-run — Run program on NVIDIA dGPU
+# Run program on the NVIDIA GPU
 export __NV_PRIME_RENDER_OFFLOAD=1
 export __GLX_VENDOR_LIBRARY_NAME=nvidia
 export __VK_LAYER_NV_optimus=NVIDIA_only
@@ -144,49 +157,49 @@ exec "$@"
 EOF
 
 chmod 755 "$PRIME_RUN"
-ok "prime-run installed"
+ok "prime-run ready (use: prime-run <app>)"
 
 # ------------------------------------------------------
-# 7. GRUB CONFIGURATION
+# 8. GRUB SETTINGS — enable NVIDIA DRM modeset
 # ------------------------------------------------------
 
 GRUB_FILE="/etc/default/grub"
 GRUB_PARAM="nvidia-drm.modeset=1"
 
 if [ -f "$GRUB_FILE" ]; then
-  info "Ensuring GRUB contains $GRUB_PARAM"
-  if ! grep -q "$GRUB_PARAM" "$GRUB_FILE"; then
-    sed -i "s/\(GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*\)\"/\1 $GRUB_PARAM\"/" "$GRUB_FILE"
-    ok "Inserted GRUB param"
-  else
-    info "GRUB param already present"
-  fi
-else
-  warn "No /etc/default/grub found — skipping GRUB modification"
-fi
+    info "Ensuring GRUB contains: $GRUB_PARAM"
 
-if [ -f /boot/grub/grub.cfg ] || [ -d /boot/grub ]; then
-  command -v grub-mkconfig >/dev/null && {
-    grub-mkconfig -o /boot/grub/grub.cfg && ok "grub.cfg updated" ||
-      warn "grub-mkconfig failed"
-  }
+    if ! grep -q "$GRUB_PARAM" "$GRUB_FILE"; then
+        sed -i "s|\(GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*\)\"|\1 $GRUB_PARAM\"|" "$GRUB_FILE"
+        ok "Added GRUB param"
+    else
+        info "GRUB param already present"
+    fi
+
+    if command -v grub-mkconfig >/dev/null 2>&1; then
+        grub-mkconfig -o /boot/grub/grub.cfg >>"$LOG_FILE" 2>&1 \
+            && ok "grub.cfg regenerated" \
+            || warn "grub-mkconfig failed (check EFI mount)"
+    fi
+else
+    warn "Missing /etc/default/grub — skipping GRUB edits"
 fi
 
 # ------------------------------------------------------
-# 8. OPTIONAL CHECKS
+# 9. VULKAN ICD CHECK
 # ------------------------------------------------------
 
 if compgen -G "/usr/share/vulkan/icd.d/*nvidia*.json" >/dev/null; then
-  ok "Vulkan NVIDIA ICD present"
+    ok "Vulkan NVIDIA ICD present"
 else
-  warn "NVIDIA Vulkan ICD missing — Vulkan offload may not work"
+    warn "Missing Vulkan NVIDIA ICD — Vulkan offload may not function"
 fi
 
 # ------------------------------------------------------
-# 9. DONE
+# 10. END
 # ------------------------------------------------------
 
-log "NVIDIA PRIME offload configuration complete"
-pp "✔ NVIDIA PRIME configured (intel → primary, nvidia → offload)"
-pp "→ Use: prime-run <app>"
+log "✔ NVIDIA PRIME Render Offload configuration complete"
+pp "✔ NVIDIA PRIME configured (Intel primary → NVIDIA offload)"
+pp "→ Run apps with: prime-run <program>"
 exit 0
