@@ -2,7 +2,9 @@
 # installers/vulkan.sh — Vulkan ICD verification for Intel/NVIDIA hybrid systems
 # ROOT-SCRIPT — invoked by install.sh (no package installs performed)
 
-set -euo pipefail
+# We intentionally DO NOT use -e here: this is a diagnostics script and
+# should not kill the whole install because some check command returns != 0
+set -uo pipefail
 
 # ------------------------------------------------------
 # 1. CONTEXT NORMALIZATION
@@ -40,7 +42,7 @@ log() {
 }
 info()  { log "INFO  $*"; }
 warn()  { log "WARN  $*"; }
-error() { log "ERROR $*"; }
+error() { log "ERROR $*"; exit 1; }   # real fatal
 ok()    { log "OK    $*"; }
 pp()    { echo -e "$*"; }
 
@@ -74,8 +76,6 @@ fi
 # ------------------------------------------------------
 if [ "$EUID" -ne 0 ]; then
   error "This script must be executed as root (install.sh ROOT_SCRIPTS)"
-  pp "❌ vulkan.sh: need root"
-  exit 1
 fi
 
 info "NOTE: Vulkan packages are installed in packages.sh — this script performs checks only."
@@ -84,6 +84,10 @@ info "NOTE: Vulkan packages are installed in packages.sh — this script perform
 # 3. DETECT ICDs
 # ------------------------------------------------------
 ICD_DIR="/usr/share/vulkan/icd.d"
+
+if [ ! -d "$ICD_DIR" ]; then
+  error "ICD directory $ICD_DIR does not exist — no Vulkan ICDs installed at all."
+fi
 
 INTEL_ICD=$(ls "$ICD_DIR"/*intel*.json 2>/dev/null || true)
 NVIDIA_ICD=$(ls "$ICD_DIR"/*nvidia*.json 2>/dev/null || true)
@@ -109,8 +113,6 @@ elif [ -z "$INTEL_ICD" ] && [ -n "$NVIDIA_ICD" ]; then
   warn "Only NVIDIA ICD present — desktop compositors may break (missing Intel ICD!)"
 else
   error "No Vulkan ICDs found — Vulkan subsystem is NOT functional."
-  pp "❌ Vulkan ICDs missing — check mesa-vulkan-intel / NVIDIA driver setup."
-  exit 1
 fi
 
 # ------------------------------------------------------
