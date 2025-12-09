@@ -1,120 +1,166 @@
 #!/usr/bin/env bash
-# selector.sh — theme selector for SDDM Astronaut theme
-# USER-SCRIPT (run before the root SDDM installer)
+# installers/sddm_theme_selector.sh
+# USER-SCRIPT (run as non-root, uses no sudo)
 #
 # ------------------------------------------------------
 #  void-shoizf Script Version
 # ------------------------------------------------------
-#  Name: selector.sh
-#  Version: 1.0.0
-#  Updated: 2025-12-10
-#  Purpose: Ask user which SDDM theme to use. Writes result to temp directory.
+#  Name: sddm_theme_selector.sh
+#  Version: 1.1.0
+#  Updated: 2025-12-09
+#  Purpose: Collect theme choice BEFORE the root script runs.
+#           Writes result to temp file for sddm_astronaut.sh.
 # ------------------------------------------------------
 
 set -euo pipefail
 
-SCRIPT_NAME="selector"
+SCRIPT_NAME="$(basename "$0" .sh)"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
-# install.sh will export this
-TMP_STAGING="${TMP_STAGING:-$HOME/.cache/void-shoizf-selector}"
+TARGET_USER="${TARGET_USER:-$USER}"
+TARGET_HOME="${TARGET_HOME:-$HOME}"
 
-mkdir -p "$TMP_STAGING"
+LOG_FILE="${VOID_SHOIZF_MASTER_LOG}"
 
-LOG_FILE="$TMP_STAGING/${SCRIPT_NAME}-${TIMESTAMP}.log"
-QUIET_MODE=${QUIET_MODE:-true}
+# Temp directory for selector
+TMP_DIR="$TARGET_HOME/.cache/void-shoizf-sddm"
+mkdir -p "$TMP_DIR"
+CHOICE_FILE="$TMP_DIR/theme_choice.txt"
 
-log() { 
+# Final script will remove the folder entirely.
+# We only write here.
+
+log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [$SCRIPT_NAME] $*"
-    echo "$msg" >>"$LOG_FILE"
-    [ "$QUIET_MODE" = false ] && echo "$msg"
+    echo "$msg" >> "$LOG_FILE"
 }
 
 pp() { echo -e "$*"; }
 
 # ------------------------------------------------------
-# THEMES (alphabetical, numbered automatically)
+# Theme list (alphabetical A → Z)
 # ------------------------------------------------------
+
 THEMES=(
-    "astronaut"
-    "black_hole"
-    "cyberpunk"
-    "hyprland_kath"
-    "jake_the_dog"
-    "japanese_aesthetic"
-    "pixel_sakura"
-    "pixel_sakura_static"
-    "post-apocalyptic_hacker"
-    "purple_leaves"
+  "astronaut"
+  "black_hole"
+  "cyberpunk"
+  "hyprland_kath"
+  "jake_the_dog"
+  "japanese_aesthetic"
+  "pixel_sakura"
+  "pixel_sakura_static"
+  "post-apocalyptic_hacker"
+  "purple_leaves"
 )
 
-DEFAULT="jake_the_dog"
+DEFAULT_THEME="jake_the_dog"
 
 # ------------------------------------------------------
-# UI + countdown
+# UI HEADER
 # ------------------------------------------------------
 
-pp "▶ SDDM Theme Selection (default: $DEFAULT)"
+pp ""
+pp "▶ SDDM Theme Selection (default: ${DEFAULT_THEME})"
 pp ""
 pp "Available themes:"
-
 i=1
 for t in "${THEMES[@]}"; do
     pp "  $i) $t"
     i=$((i+1))
 done
-
 pp ""
-pp "Press [number + Enter] to choose theme."
-pp "Timer: 15 seconds.  (p = pause, r = resume)"
+pp "Press [number + ENTER] to choose a theme."
+pp "Timer: 15 seconds.  (p = pause, r = resume, ENTER = select default)"
 pp ""
 
-chosen=""
-seconds=15
-paused=false
+# ------------------------------------------------------
+# INPUT + COUNTDOWN ENGINE
+# ------------------------------------------------------
 
-while [ "$seconds" -gt 0 ]; do
-    if ! $paused; then
-        pp "Time remaining: ${seconds}s"
-    fi
+CHOICE=""
+SECONDS_LEFT=15
+PAUSED=false
 
-    read -t 1 -p "> " input || true
+# Disable buffering for instant input
+stty -icanon -echo min 1 time 0
 
-    if [ -n "${input:-}" ]; then
-        case "$input" in
+print_timer() {
+    echo -ne "\rTime remaining: ${SECONDS_LEFT}s  "
+}
+
+while true; do
+    print_timer
+
+    # Read one character if available
+    if read -t 1 -n 1 key; then
+        case "$key" in
+            [0-9])
+                CHOICE="$key"
+                ;;
             p|P)
-                paused=true
-                pp "[Paused]"
+                PAUSED=true
                 ;;
             r|R)
-                paused=false
-                pp "[Resumed]"
+                PAUSED=false
                 ;;
-            ''|*[!0-9]*)
-                pp "Invalid entry."
-                ;;
-            *)
-                idx=$((input))
-                if [ "$idx" -ge 1 ] && [ "$idx" -le "${#THEMES[@]}" ]; then
-                    chosen="${THEMES[$((idx-1))]}"
-                    break
-                else
-                    pp "Invalid selection."
-                fi
+            "")
+                # ENTER = default
+                CHOICE=""
                 ;;
         esac
+
+        # User selected a number
+        if [[ "$CHOICE" =~ ^[0-9]+$ ]]; then
+            break
+        fi
+
+        # ENTER key pressed → default
+        if [ "$key" = "" ]; then
+            break
+        fi
     fi
 
-    if ! $paused; then
-        seconds=$((seconds - 1))
+    # Countdown logic
+    if [ "$PAUSED" = false ]; then
+        SECONDS_LEFT=$((SECONDS_LEFT - 1))
+    fi
+
+    # When timer hits zero → fallback to default
+    if [ "$SECONDS_LEFT" -le 0 ]; then
+        CHOICE=""
+        break
     fi
 done
 
-[ -z "$chosen" ] && chosen="$DEFAULT"
+# Restore terminal state
+stty sane
+echo ""
 
-echo "$chosen" > "$TMP_STAGING/theme"
+# ------------------------------------------------------
+# RESOLVE CHOICE
+# ------------------------------------------------------
 
-log "User selected: $chosen"
-pp "Selected theme: $chosen"
+if [[ -z "$CHOICE" ]]; then
+    THEME="$DEFAULT_THEME"
+else
+    INDEX=$((CHOICE - 1))
+
+    if (( INDEX < 0 || INDEX >= ${#THEMES[@]} )); then
+        THEME="$DEFAULT_THEME"
+    else
+        THEME="${THEMES[$INDEX]}"
+    fi
+fi
+
+# ------------------------------------------------------
+# WRITE RESULT
+# ------------------------------------------------------
+
+echo "$THEME" > "$CHOICE_FILE"
+log "Selected theme: $THEME (saved to $CHOICE_FILE)"
+
+pp "✔ Theme selected: $THEME"
+pp ""
 
 exit 0
