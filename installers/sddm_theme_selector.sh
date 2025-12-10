@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # installers/sddm_theme_selector.sh — Interactive SDDM theme chooser
-# Version: 1.0.1
-# Updated: 2025-12-10
+# Version: 1.2.0 (final stable)
 
 set -euo pipefail
 
@@ -9,7 +8,7 @@ SCRIPT_NAME="sddm_theme_selector"
 TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 
 # ------------------------------------------------------
-# LOGGING
+# Logging into master log
 # ------------------------------------------------------
 if [ -n "${VOID_SHOIZF_MASTER_LOG:-}" ]; then
     LOG_FILE="$VOID_SHOIZF_MASTER_LOG"
@@ -22,25 +21,35 @@ log() {
 }
 
 echo ""
-echo "▶ SDDM Theme Selection"
-echo "Default: jake_the_dog"
+echo "▶ SDDM Theme Selection (default: jake_the_dog)"
 
 # ------------------------------------------------------
-# VALIDATE TEMP CLONE DIR EXISTS (created by sddm_astronaut.sh)
+# WORK DIRECTORY
 # ------------------------------------------------------
 THEME_DIR="$TARGET_HOME/.cache/void-shoizf-sddm-theme"
+
+# Clean any previous leftover
+rm -rf "$THEME_DIR"
+mkdir -p "$THEME_DIR"
+
+# ------------------------------------------------------
+# 1. Clone theme repo
+# ------------------------------------------------------
+log "Cloning SDDM theme pack..."
+git clone --depth=1 https://github.com/shoizf/void-niri-sddm-themes "$THEME_DIR" >> "$LOG_FILE" 2>&1
+
 THEMES_DIR="$THEME_DIR/Themes"
 
 if [ ! -d "$THEMES_DIR" ]; then
-    log "ERROR: Missing theme directory: $THEMES_DIR"
-    echo "ERROR: sddm theme directory missing. Clone step did not run."
+    echo "ERROR: theme directory missing after clone."
+    log "ERROR: THEMES_DIR missing after clone."
     exit 1
 fi
 
 # ------------------------------------------------------
-# LOAD THEMES
+# 2. Collect themes
 # ------------------------------------------------------
-mapfile -t THEMES < <(ls "$THEMES_DIR" | sed 's/.conf$//' | sort)
+mapfile -t THEMES < <(ls "$THEMES_DIR" | sort)
 
 echo ""
 echo "Available themes:"
@@ -53,18 +62,18 @@ done
 DEFAULT="jake_the_dog"
 
 echo ""
-echo "Select by typing NUMBER + ENTER"
-echo "Controls: [p] pause | [r] resume | ENTER = default"
+echo "Press [number + Enter] to choose theme."
+echo "Timer: 15 seconds  (p = pause, r = resume, ENTER = default)"
 echo ""
 
 # ------------------------------------------------------
-# INPUT ENGINE — multi-digit + ENTER confirm
+# INPUT ENGINE (digit buffer + ENTER)
 # ------------------------------------------------------
 SECONDS_LEFT=15
 PAUSED=false
 INPUT=""
 
-# Disable canonical mode for instant key reads
+# Instant key reads
 stty -icanon -echo min 1 time 0
 
 print_timer() {
@@ -77,7 +86,7 @@ while true; do
     if read -t 1 -n 1 key; then
         case "$key" in
             [0-9])
-                INPUT+="$key"   # append digits
+                INPUT="$INPUT$key"
                 ;;
             p|P)
                 PAUSED=true
@@ -86,13 +95,16 @@ while true; do
                 PAUSED=false
                 ;;
             "")
-                # ENTER pressed → stop
                 break
                 ;;
         esac
     fi
 
-    # Countdown tick
+    # ENTER pressed AND we have input
+    if [[ "$key" = "" && -n "$INPUT" ]]; then
+        break
+    fi
+
     if [ "$PAUSED" = false ]; then
         SECONDS_LEFT=$((SECONDS_LEFT - 1))
     fi
@@ -103,7 +115,6 @@ while true; do
     fi
 done
 
-# Restore terminal settings
 stty sane
 echo ""
 
@@ -113,9 +124,7 @@ echo ""
 if [[ -z "$INPUT" ]]; then
     CHOICE="$DEFAULT"
 else
-    if [[ "$INPUT" =~ ^[0-9]+$ ]] \
-       && [ "$INPUT" -ge 1 ] \
-       && [ "$INPUT" -le "${#THEMES[@]}" ]; then
+    if [[ "$INPUT" =~ ^[0-9]+$ ]] && [ "$INPUT" -ge 1 ] && [ "$INPUT" -le "${#THEMES[@]}" ]; then
         CHOICE="${THEMES[$((INPUT-1))]}"
     else
         CHOICE="$DEFAULT"
@@ -126,9 +135,9 @@ echo "✔ Theme selected: $CHOICE"
 log "Theme selected: $CHOICE"
 
 # ------------------------------------------------------
-# WRITE SELECTION FOR ROOT SCRIPT
+# OUTPUT RESULT FOR NEXT SCRIPT
 # ------------------------------------------------------
-RESULT_FILE="/tmp/void-shoizf-sddm-selection"
-echo "$CHOICE" > "$RESULT_FILE"
+SELECTION_FILE="/tmp/void-shoizf-sddm-selection"
+echo "$CHOICE" > "$SELECTION_FILE"
 
 exit 0
